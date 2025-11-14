@@ -11,6 +11,7 @@ import { AddMemberDialog } from './components/add-member-dialog';
 import { exportToCSV, exportToExcel } from './lib/fileExporter';
 import { getVisibleNodes, getAllNodeIds } from './lib/hierarchyUtils';
 import { addMemberToHierarchy, deleteNodeFromHierarchy, duplicateNode, generateUniqueName } from './lib/nodeOperations';
+import { moveNodeToNewParent } from './lib/dragDropOperations';
 import { cn } from './lib/utils';
 import type { HierarchyNode, ParsedData } from './types/hierarchy';
 
@@ -159,6 +160,21 @@ function App() {
     }
   }, [parsedData, expandedNodes]);
 
+  const handleNodeMove = useCallback((nodeId: string, newParentId: string | null) => {
+    if (!parsedData) return;
+
+    const updated = moveNodeToNewParent(parsedData, nodeId, newParentId);
+    if (updated) {
+      setParsedData(updated);
+      // Expand the new parent to show the moved node
+      if (newParentId && !expandedNodes.has(newParentId)) {
+        setExpandedNodes(prev => new Set(prev).add(newParentId));
+      }
+    } else {
+      alert('Cannot move node: This would create a circular dependency or invalid hierarchy.');
+    }
+  }, [parsedData, expandedNodes]);
+
   const visibleNodes = useMemo(() => {
     if (!parsedData) return [];
     return getVisibleNodes(parsedData.roots, expandedNodes);
@@ -286,6 +302,7 @@ function App() {
                     expandedNodes={expandedNodes}
                     onToggleExpand={handleToggleExpand}
                     onContextMenu={handleContextMenu}
+                    onNodeMove={handleNodeMove}
                   />
                 </div>
               </div>
@@ -361,7 +378,7 @@ function App() {
       <footer className="border-t px-6 py-2 text-xs text-muted-foreground bg-card">
         <div className="flex items-center justify-between">
           <span>
-            Right-click members for options • Drag divider to resize • Only leaf nodes can be deleted
+            Drag & drop to move members • Right-click for options • Drag divider to resize
           </span>
           {parsedData && (
             <span>

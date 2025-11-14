@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import {
   ChevronRight,
   ChevronDown,
@@ -17,6 +17,7 @@ interface TreeViewProps {
   expandedNodes: Set<string>;
   onToggleExpand: (nodeId: string) => void;
   onContextMenu?: (node: HierarchyNode, x: number, y: number) => void;
+  onNodeMove?: (nodeId: string, newParentId: string | null) => void;
 }
 
 interface TreeNodeProps {
@@ -26,9 +27,24 @@ interface TreeNodeProps {
   isExpanded: boolean;
   onToggle: () => void;
   onContextMenu?: (node: HierarchyNode, x: number, y: number) => void;
+  onDragStart?: (nodeId: string) => void;
+  onDragOver?: (nodeId: string) => void;
+  onDrop?: (nodeId: string) => void;
+  isDragOver?: boolean;
 }
 
-function TreeNode({ node, isSelected, onSelect, isExpanded, onToggle, onContextMenu }: TreeNodeProps) {
+function TreeNode({
+  node,
+  isSelected,
+  onSelect,
+  isExpanded,
+  onToggle,
+  onContextMenu,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  isDragOver,
+}: TreeNodeProps) {
   const hasChildren = node.children.length > 0;
 
   const handleClick = useCallback(() => {
@@ -41,6 +57,32 @@ function TreeNode({ node, isSelected, onSelect, isExpanded, onToggle, onContextM
       onContextMenu(node, e.clientX, e.clientY);
     }
   }, [node, onContextMenu]);
+
+  const handleDragStart = useCallback((e: React.DragEvent) => {
+    e.stopPropagation();
+    if (onDragStart) {
+      onDragStart(node.id);
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', node.id);
+    }
+  }, [node.id, onDragStart]);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    if (onDragOver) {
+      onDragOver(node.id);
+    }
+  }, [node.id, onDragOver]);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (onDrop) {
+      onDrop(node.id);
+    }
+  }, [node.id, onDrop]);
 
   const getIcon = () => {
     if (node.level === 0) {
@@ -62,10 +104,15 @@ function TreeNode({ node, isSelected, onSelect, isExpanded, onToggle, onContextM
   return (
     <div className="select-none">
       <div
+        draggable
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
         className={cn(
-          'flex items-center gap-1 py-1.5 px-2 rounded-md cursor-pointer',
+          'flex items-center gap-1 py-1.5 px-2 rounded-md cursor-move',
           'hover:bg-accent transition-colors',
-          isSelected && 'bg-primary/10 hover:bg-primary/15'
+          isSelected && 'bg-primary/10 hover:bg-primary/15',
+          isDragOver && 'bg-primary/20 ring-2 ring-primary'
         )}
         style={{ paddingLeft: `${node.level * 20 + 8}px` }}
       >
@@ -103,13 +150,46 @@ function TreeNode({ node, isSelected, onSelect, isExpanded, onToggle, onContextM
   );
 }
 
-export function TreeView({ nodes, selectedNode, onNodeSelect, expandedNodes, onToggleExpand, onContextMenu }: TreeViewProps) {
+export function TreeView({
+  nodes,
+  selectedNode,
+  onNodeSelect,
+  expandedNodes,
+  onToggleExpand,
+  onContextMenu,
+  onNodeMove,
+}: TreeViewProps) {
+  const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
+  const [dragOverNodeId, setDragOverNodeId] = useState<string | null>(null);
+
+  const handleDragStart = useCallback((nodeId: string) => {
+    setDraggedNodeId(nodeId);
+  }, []);
+
+  const handleDragOver = useCallback((nodeId: string) => {
+    setDragOverNodeId(nodeId);
+  }, []);
+
+  const handleDrop = useCallback((targetNodeId: string) => {
+    if (draggedNodeId && draggedNodeId !== targetNodeId && onNodeMove) {
+      onNodeMove(draggedNodeId, targetNodeId);
+    }
+    setDraggedNodeId(null);
+    setDragOverNodeId(null);
+  }, [draggedNodeId, onNodeMove]);
+
+  const handleDragEnd = useCallback(() => {
+    setDraggedNodeId(null);
+    setDragOverNodeId(null);
+  }, []);
+
   const renderNode = (node: HierarchyNode) => {
     const isExpanded = expandedNodes.has(node.id);
     const hasChildren = node.children.length > 0;
+    const isDragOver = dragOverNodeId === node.id;
 
     return (
-      <div key={node.id}>
+      <div key={node.id} onDragEnd={handleDragEnd}>
         <TreeNode
           node={node}
           isSelected={selectedNode?.id === node.id}
@@ -117,6 +197,10 @@ export function TreeView({ nodes, selectedNode, onNodeSelect, expandedNodes, onT
           isExpanded={isExpanded}
           onToggle={() => onToggleExpand(node.id)}
           onContextMenu={onContextMenu}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+          isDragOver={isDragOver}
         />
         {hasChildren && isExpanded && (
           <div>
