@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useCallback } from 'react';
 import {
   ChevronRight,
   ChevronDown,
@@ -14,23 +14,20 @@ interface TreeViewProps {
   nodes: HierarchyNode[];
   selectedNode: HierarchyNode | null;
   onNodeSelect: (node: HierarchyNode) => void;
+  expandedNodes: Set<string>;
+  onToggleExpand: (nodeId: string) => void;
 }
 
 interface TreeNodeProps {
   node: HierarchyNode;
   isSelected: boolean;
   onSelect: (node: HierarchyNode) => void;
+  isExpanded: boolean;
+  onToggle: () => void;
 }
 
-function TreeNode({ node, isSelected, onSelect }: TreeNodeProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
+function TreeNode({ node, isSelected, onSelect, isExpanded, onToggle }: TreeNodeProps) {
   const hasChildren = node.children.length > 0;
-
-  const handleToggle = useCallback(() => {
-    if (hasChildren) {
-      setIsExpanded(!isExpanded);
-    }
-  }, [hasChildren, isExpanded]);
 
   const handleClick = useCallback(() => {
     onSelect(node);
@@ -64,7 +61,7 @@ function TreeNode({ node, isSelected, onSelect }: TreeNodeProps) {
         style={{ paddingLeft: `${node.level * 20 + 8}px` }}
       >
         <button
-          onClick={handleToggle}
+          onClick={onToggle}
           className={cn(
             'flex items-center justify-center w-4 h-4',
             !hasChildren && 'invisible'
@@ -92,23 +89,33 @@ function TreeNode({ node, isSelected, onSelect }: TreeNodeProps) {
         </div>
       </div>
 
-      {hasChildren && isExpanded && (
-        <div>
-          {node.children.map((child) => (
-            <TreeNode
-              key={child.id}
-              node={child}
-              isSelected={isSelected}
-              onSelect={onSelect}
-            />
-          ))}
-        </div>
-      )}
     </div>
   );
 }
 
-export function TreeView({ nodes, selectedNode, onNodeSelect }: TreeViewProps) {
+export function TreeView({ nodes, selectedNode, onNodeSelect, expandedNodes, onToggleExpand }: TreeViewProps) {
+  const renderNode = (node: HierarchyNode) => {
+    const isExpanded = expandedNodes.has(node.id);
+    const hasChildren = node.children.length > 0;
+
+    return (
+      <div key={node.id}>
+        <TreeNode
+          node={node}
+          isSelected={selectedNode?.id === node.id}
+          onSelect={onNodeSelect}
+          isExpanded={isExpanded}
+          onToggle={() => onToggleExpand(node.id)}
+        />
+        {hasChildren && isExpanded && (
+          <div>
+            {node.children.map((child) => renderNode(child))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="w-full h-full overflow-auto p-2">
       {nodes.length === 0 ? (
@@ -117,14 +124,7 @@ export function TreeView({ nodes, selectedNode, onNodeSelect }: TreeViewProps) {
         </div>
       ) : (
         <div className="space-y-0.5">
-          {nodes.map((node) => (
-            <TreeNode
-              key={node.id}
-              node={node}
-              isSelected={selectedNode?.id === node.id}
-              onSelect={onNodeSelect}
-            />
-          ))}
+          {nodes.map((node) => renderNode(node))}
         </div>
       )}
     </div>

@@ -1,10 +1,11 @@
-import { useState, useCallback } from 'react';
-import { Download, Network } from 'lucide-react';
+import { useState, useCallback, useMemo } from 'react';
+import { Download, Network, ChevronsRight, ChevronsDown } from 'lucide-react';
 import { ThemeToggle } from './components/theme-toggle';
 import { FileUpload } from './components/file-upload';
 import { TreeView } from './components/tree-view';
-import { PropertiesGrid } from './components/properties-grid';
+import { HierarchyGrid } from './components/hierarchy-grid';
 import { exportToCSV, exportToExcel } from './lib/fileExporter';
+import { getVisibleNodes, getAllNodeIds } from './lib/hierarchyUtils';
 import { cn } from './lib/utils';
 import type { HierarchyNode, ParsedData } from './types/hierarchy';
 
@@ -12,11 +13,14 @@ function App() {
   const [parsedData, setParsedData] = useState<ParsedData | null>(null);
   const [selectedNode, setSelectedNode] = useState<HierarchyNode | null>(null);
   const [showUpload, setShowUpload] = useState(true);
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
 
   const handleDataLoaded = useCallback((data: ParsedData) => {
     setParsedData(data);
     setSelectedNode(null);
     setShowUpload(false);
+    // Expand all nodes by default for grid view
+    setExpandedNodes(getAllNodeIds(data.roots));
   }, []);
 
   const handlePropertyChange = useCallback(
@@ -48,7 +52,34 @@ function App() {
     setShowUpload(true);
     setParsedData(null);
     setSelectedNode(null);
+    setExpandedNodes(new Set());
   }, []);
+
+  const handleToggleExpand = useCallback((nodeId: string) => {
+    setExpandedNodes((prev) => {
+      const next = new Set(prev);
+      if (next.has(nodeId)) {
+        next.delete(nodeId);
+      } else {
+        next.add(nodeId);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleExpandAll = useCallback(() => {
+    if (!parsedData) return;
+    setExpandedNodes(getAllNodeIds(parsedData.roots));
+  }, [parsedData]);
+
+  const handleCollapseAll = useCallback(() => {
+    setExpandedNodes(new Set());
+  }, []);
+
+  const visibleNodes = useMemo(() => {
+    if (!parsedData) return [];
+    return getVisibleNodes(parsedData.roots, expandedNodes);
+  }, [parsedData, expandedNodes]);
 
   return (
     <div className="h-screen flex flex-col bg-background text-foreground">
@@ -119,9 +150,33 @@ function App() {
             {/* Tree View Panel */}
             <div className="w-1/3 border-r bg-card flex flex-col">
               <div className="border-b px-4 py-3 bg-muted/50">
-                <h2 className="font-semibold">Hierarchy Tree</h2>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {parsedData.nodes.size} nodes loaded
+                <div className="flex items-center justify-between mb-2">
+                  <h2 className="font-semibold">Hierarchy Tree</h2>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={handleExpandAll}
+                      className={cn(
+                        'p-1 rounded hover:bg-accent transition-colors',
+                        'text-muted-foreground hover:text-foreground'
+                      )}
+                      title="Expand All"
+                    >
+                      <ChevronsDown className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={handleCollapseAll}
+                      className={cn(
+                        'p-1 rounded hover:bg-accent transition-colors',
+                        'text-muted-foreground hover:text-foreground'
+                      )}
+                      title="Collapse All"
+                    >
+                      <ChevronsRight className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {parsedData.nodes.size} nodes • {visibleNodes.length} visible
                 </p>
               </div>
               <div className="flex-1 overflow-hidden">
@@ -129,26 +184,23 @@ function App() {
                   nodes={parsedData.roots}
                   selectedNode={selectedNode}
                   onNodeSelect={setSelectedNode}
+                  expandedNodes={expandedNodes}
+                  onToggleExpand={handleToggleExpand}
                 />
               </div>
             </div>
 
-            {/* Properties Panel */}
+            {/* Grid View Panel */}
             <div className="flex-1 bg-background flex flex-col">
               <div className="border-b px-4 py-3 bg-muted/50">
-                <h2 className="font-semibold">
-                  {selectedNode ? `Properties: ${selectedNode.name}` : 'Properties'}
-                </h2>
-                {selectedNode && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Level {selectedNode.level} • {selectedNode.children.length}{' '}
-                    {selectedNode.children.length === 1 ? 'child' : 'children'}
-                  </p>
-                )}
+                <h2 className="font-semibold">Properties Grid</h2>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Edit multiple members • Click any cell to edit • Use filters to find data
+                </p>
               </div>
               <div className="flex-1 overflow-hidden p-4">
-                <PropertiesGrid
-                  node={selectedNode}
+                <HierarchyGrid
+                  visibleNodes={visibleNodes}
                   columns={parsedData.columns}
                   onPropertyChange={handlePropertyChange}
                 />
@@ -162,7 +214,7 @@ function App() {
       <footer className="border-t px-6 py-2 text-xs text-muted-foreground bg-card">
         <div className="flex items-center justify-between">
           <span>
-            Supports CSV and Excel files • Click to select nodes • Click values to edit
+            Supports CSV and Excel files • Expand/collapse tree to control visible rows • Click cells to edit • Filter columns
           </span>
           {parsedData && (
             <span>
