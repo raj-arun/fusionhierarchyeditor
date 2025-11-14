@@ -1,5 +1,5 @@
 import Papa from 'papaparse';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import type { HierarchyNode } from '../types/hierarchy';
 
 export function flattenHierarchy(
@@ -33,28 +33,41 @@ export function exportToCSV(
   downloadFile(blob, filename);
 }
 
-export function exportToExcel(
+export async function exportToExcel(
   nodes: HierarchyNode[],
   columns: string[],
   filename: string = 'hierarchy-export.xlsx'
 ) {
   const rows = flattenHierarchy(nodes, columns);
-  const data = [columns, ...rows];
 
-  const worksheet = XLSX.utils.aoa_to_sheet(data);
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'Hierarchy');
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet('Hierarchy');
 
-  // Auto-size columns
-  const maxWidths = columns.map((col, i) => {
-    const columnData = [col, ...rows.map((row) => row[i] || '')];
-    return Math.max(...columnData.map((cell) => String(cell).length));
+  // Add header row
+  worksheet.addRow(columns);
+
+  // Add data rows
+  rows.forEach(row => {
+    worksheet.addRow(row);
   });
 
-  worksheet['!cols'] = maxWidths.map((width) => ({ wch: Math.min(width + 2, 50) }));
+  // Auto-size columns
+  worksheet.columns = columns.map((col, i) => {
+    const columnData = [col, ...rows.map((row) => row[i] || '')];
+    const maxWidth = Math.max(...columnData.map((cell) => String(cell).length));
+    return {
+      header: col,
+      key: col,
+      width: Math.min(maxWidth + 2, 50)
+    };
+  });
 
-  const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
-  const blob = new Blob([excelBuffer], {
+  // Style the header row
+  worksheet.getRow(1).font = { bold: true };
+
+  // Generate buffer and download
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   });
 

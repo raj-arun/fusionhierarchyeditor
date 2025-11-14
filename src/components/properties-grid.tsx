@@ -48,7 +48,7 @@ export function PropertiesGrid({
           </div>
         );
       },
-      cell: ({ row, column: col }) => {
+      cell: ({ row }) => {
         const value = row.getValue(column) as string;
         const [isEditing, setIsEditing] = useState(false);
         const [editValue, setEditValue] = useState(value);

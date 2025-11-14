@@ -1,5 +1,5 @@
 import Papa from 'papaparse';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import type { FileData, HierarchyNode, ParsedData } from '../types/hierarchy';
 
 export function parseCSV(file: File): Promise<FileData> {
@@ -25,35 +25,38 @@ export function parseCSV(file: File): Promise<FileData> {
   });
 }
 
-export function parseExcel(file: File): Promise<FileData> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
+export async function parseExcel(file: File): Promise<FileData> {
+  try {
+    const buffer = await file.arrayBuffer();
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buffer);
 
-    reader.onload = (e) => {
-      try {
-        const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-        const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 }) as string[][];
+    const worksheet = workbook.worksheets[0];
+    if (!worksheet) {
+      throw new Error('No worksheet found in the Excel file');
+    }
 
-        if (jsonData.length < 2) {
-          reject(new Error('File must contain at least a header row and one data row'));
-          return;
-        }
+    const jsonData: string[][] = [];
+    worksheet.eachRow((row) => {
+      const rowData: string[] = [];
+      row.eachCell({ includeEmpty: true }, (cell) => {
+        rowData.push(String(cell.value || ''));
+      });
+      jsonData.push(rowData);
+    });
 
-        // Remove BOM if present
-        const headers = jsonData[0].map(h => String(h || '').replace(/^\ufeff/, '').trim());
-        const rows = jsonData.slice(1).filter(row => row.some(cell => cell !== undefined && cell !== null && String(cell).trim()));
+    if (jsonData.length < 2) {
+      throw new Error('File must contain at least a header row and one data row');
+    }
 
-        resolve({ headers, rows: rows.map(row => row.map(cell => String(cell || ''))) });
-      } catch (error) {
-        reject(error);
-      }
-    };
+    // Remove BOM if present
+    const headers = jsonData[0].map(h => String(h || '').replace(/^\ufeff/, '').trim());
+    const rows = jsonData.slice(1).filter(row => row.some(cell => cell !== undefined && cell !== null && String(cell).trim()));
 
-    reader.onerror = () => reject(reader.error);
-    reader.readAsArrayBuffer(file);
-  });
+    return { headers, rows: rows.map(row => row.map(cell => String(cell || ''))) };
+  } catch (error) {
+    throw error;
+  }
 }
 
 export function buildHierarchy(fileData: FileData): ParsedData {

@@ -39,9 +39,9 @@ function App() {
     exportToCSV(parsedData.roots, parsedData.columns);
   }, [parsedData]);
 
-  const handleExportExcel = useCallback(() => {
+  const handleExportExcel = useCallback(async () => {
     if (!parsedData) return;
-    exportToExcel(parsedData.roots, parsedData.columns);
+    await exportToExcel(parsedData.roots, parsedData.columns);
   }, [parsedData]);
 
   const handleNewFile = useCallback(() => {
