@@ -1,19 +1,33 @@
 import { useState, useCallback, useMemo } from 'react';
-import { Download, Network, ChevronsRight, ChevronsDown } from 'lucide-react';
+import { Download, Network, ChevronsRight, ChevronsDown, Plus, Grid3x3, User } from 'lucide-react';
 import { ThemeToggle } from './components/theme-toggle';
 import { FileUpload } from './components/file-upload';
 import { TreeView } from './components/tree-view';
 import { HierarchyGrid } from './components/hierarchy-grid';
+import { PropertiesGrid } from './components/properties-grid';
+import { ResizablePane } from './components/resizable-pane';
+import { ContextMenu } from './components/context-menu';
+import { AddMemberDialog } from './components/add-member-dialog';
 import { exportToCSV, exportToExcel } from './lib/fileExporter';
 import { getVisibleNodes, getAllNodeIds } from './lib/hierarchyUtils';
+import { addMemberToHierarchy, deleteNodeFromHierarchy, duplicateNode, generateUniqueName } from './lib/nodeOperations';
 import { cn } from './lib/utils';
 import type { HierarchyNode, ParsedData } from './types/hierarchy';
+
+type ViewMode = 'grid' | 'single';
 
 function App() {
   const [parsedData, setParsedData] = useState<ParsedData | null>(null);
   const [selectedNode, setSelectedNode] = useState<HierarchyNode | null>(null);
   const [showUpload, setShowUpload] = useState(true);
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+  const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  const [contextMenu, setContextMenu] = useState<{
+    node: HierarchyNode;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [showAddDialog, setShowAddDialog] = useState(false);
 
   const handleDataLoaded = useCallback((data: ParsedData) => {
     setParsedData(data);
@@ -32,10 +46,12 @@ function App() {
         node.properties[property] = value;
         // Force re-render by creating new state
         setParsedData({ ...parsedData });
-        setSelectedNode({ ...node });
+        if (selectedNode?.id === nodeId) {
+          setSelectedNode({ ...node });
+        }
       }
     },
-    [parsedData]
+    [parsedData, selectedNode]
   );
 
   const handleExportCSV = useCallback(() => {
@@ -53,6 +69,7 @@ function App() {
     setParsedData(null);
     setSelectedNode(null);
     setExpandedNodes(new Set());
+    setViewMode('grid');
   }, []);
 
   const handleToggleExpand = useCallback((nodeId: string) => {
@@ -76,10 +93,81 @@ function App() {
     setExpandedNodes(new Set());
   }, []);
 
+  const handleContextMenu = useCallback((node: HierarchyNode, x: number, y: number) => {
+    setContextMenu({ node, x, y });
+  }, []);
+
+  const handleViewProperties = useCallback(() => {
+    if (contextMenu) {
+      setSelectedNode(contextMenu.node);
+      setViewMode('single');
+    }
+  }, [contextMenu]);
+
+  const handleDeleteNode = useCallback((nodeId: string) => {
+    if (!parsedData) return;
+
+    const node = parsedData.nodes.get(nodeId);
+    if (!node) return;
+
+    if (node.children.length > 0) {
+      alert('Cannot delete parent nodes. Only leaf nodes can be deleted.');
+      return;
+    }
+
+    if (confirm(`Delete member "${node.name}"? This action cannot be undone.`)) {
+      const updated = deleteNodeFromHierarchy(parsedData, nodeId);
+      if (updated) {
+        setParsedData(updated);
+        if (selectedNode?.id === nodeId) {
+          setSelectedNode(null);
+        }
+      }
+    }
+  }, [parsedData, selectedNode]);
+
+  const handleDuplicateNode = useCallback((nodeId: string) => {
+    if (!parsedData) return;
+
+    const node = parsedData.nodes.get(nodeId);
+    if (!node) return;
+
+    const existingNames = new Set(parsedData.nodes.keys());
+    const newName = generateUniqueName(node.name, existingNames);
+
+    const updated = duplicateNode(parsedData, nodeId, newName);
+    if (updated) {
+      setParsedData(updated);
+      // Expand parent to show the new node
+      if (node.parent && !expandedNodes.has(node.parent)) {
+        setExpandedNodes(prev => new Set(prev).add(node.parent));
+      }
+    } else {
+      alert('Failed to duplicate member. Please try again.');
+    }
+  }, [parsedData, expandedNodes]);
+
+  const handleAddMember = useCallback((memberName: string, parentName: string) => {
+    if (!parsedData) return;
+
+    const updated = addMemberToHierarchy(parsedData, memberName, parentName, parsedData.columns);
+    setParsedData(updated);
+
+    // Expand parent to show the new node
+    if (parentName && !expandedNodes.has(parentName)) {
+      setExpandedNodes(prev => new Set(prev).add(parentName));
+    }
+  }, [parsedData, expandedNodes]);
+
   const visibleNodes = useMemo(() => {
     if (!parsedData) return [];
     return getVisibleNodes(parsedData.roots, expandedNodes);
   }, [parsedData, expandedNodes]);
+
+  const existingMemberNames = useMemo(() => {
+    if (!parsedData) return new Set<string>();
+    return new Set(parsedData.nodes.keys());
+  }, [parsedData]);
 
   return (
     <div className="h-screen flex flex-col bg-background text-foreground">
@@ -99,6 +187,17 @@ function App() {
           <div className="flex items-center gap-2">
             {parsedData && (
               <>
+                <button
+                  onClick={() => setShowAddDialog(true)}
+                  className={cn(
+                    'px-4 py-2 text-sm font-medium rounded-md',
+                    'bg-primary text-primary-foreground hover:bg-primary/90',
+                    'transition-colors flex items-center gap-2'
+                  )}
+                >
+                  <Plus className="h-4 w-4" />
+                  New Member
+                </button>
                 <button
                   onClick={handleNewFile}
                   className={cn(
@@ -146,67 +245,115 @@ function App() {
             </div>
           </div>
         ) : (
-          <div className="h-full flex">
-            {/* Tree View Panel */}
-            <div className="w-1/3 border-r bg-card flex flex-col">
-              <div className="border-b px-4 py-3 bg-muted/50">
-                <div className="flex items-center justify-between mb-2">
-                  <h2 className="font-semibold">Hierarchy Tree</h2>
-                  <div className="flex gap-1">
-                    <button
-                      onClick={handleExpandAll}
-                      className={cn(
-                        'p-1 rounded hover:bg-accent transition-colors',
-                        'text-muted-foreground hover:text-foreground'
-                      )}
-                      title="Expand All"
-                    >
-                      <ChevronsDown className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={handleCollapseAll}
-                      className={cn(
-                        'p-1 rounded hover:bg-accent transition-colors',
-                        'text-muted-foreground hover:text-foreground'
-                      )}
-                      title="Collapse All"
-                    >
-                      <ChevronsRight className="h-4 w-4" />
-                    </button>
+          <ResizablePane
+            leftPane={
+              <div className="h-full bg-card flex flex-col border-r">
+                <div className="border-b px-4 py-3 bg-muted/50">
+                  <div className="flex items-center justify-between mb-2">
+                    <h2 className="font-semibold">Hierarchy Tree</h2>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={handleExpandAll}
+                        className={cn(
+                          'p-1 rounded hover:bg-accent transition-colors',
+                          'text-muted-foreground hover:text-foreground'
+                        )}
+                        title="Expand All"
+                      >
+                        <ChevronsDown className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={handleCollapseAll}
+                        className={cn(
+                          'p-1 rounded hover:bg-accent transition-colors',
+                          'text-muted-foreground hover:text-foreground'
+                        )}
+                        title="Collapse All"
+                      >
+                        <ChevronsRight className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {parsedData.nodes.size} nodes • {visibleNodes.length} visible
+                  </p>
+                </div>
+                <div className="flex-1 overflow-hidden">
+                  <TreeView
+                    nodes={parsedData.roots}
+                    selectedNode={selectedNode}
+                    onNodeSelect={setSelectedNode}
+                    expandedNodes={expandedNodes}
+                    onToggleExpand={handleToggleExpand}
+                    onContextMenu={handleContextMenu}
+                  />
+                </div>
+              </div>
+            }
+            rightPane={
+              <div className="h-full bg-background flex flex-col">
+                <div className="border-b px-4 py-3 bg-muted/50">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="font-semibold">
+                        {viewMode === 'grid' ? 'Properties Grid' : `Properties: ${selectedNode?.name || 'Select a member'}`}
+                      </h2>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {viewMode === 'grid'
+                          ? 'Edit multiple members • Right-click for options'
+                          : selectedNode
+                          ? `Level ${selectedNode.level} • ${selectedNode.children.length} children`
+                          : 'Select a member to view properties'}
+                      </p>
+                    </div>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => setViewMode('grid')}
+                        className={cn(
+                          'p-2 rounded transition-colors',
+                          viewMode === 'grid'
+                            ? 'bg-primary text-primary-foreground'
+                            : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                        )}
+                        title="Grid View"
+                      >
+                        <Grid3x3 className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => setViewMode('single')}
+                        className={cn(
+                          'p-2 rounded transition-colors',
+                          viewMode === 'single'
+                            ? 'bg-primary text-primary-foreground'
+                            : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                        )}
+                        title="Single Member View"
+                      >
+                        <User className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  {parsedData.nodes.size} nodes • {visibleNodes.length} visible
-                </p>
+                <div className="flex-1 overflow-hidden p-4">
+                  {viewMode === 'grid' ? (
+                    <HierarchyGrid
+                      visibleNodes={visibleNodes}
+                      columns={parsedData.columns}
+                      onPropertyChange={handlePropertyChange}
+                      onDeleteNode={handleDeleteNode}
+                      onDuplicateNode={handleDuplicateNode}
+                    />
+                  ) : (
+                    <PropertiesGrid
+                      node={selectedNode}
+                      columns={parsedData.columns}
+                      onPropertyChange={handlePropertyChange}
+                    />
+                  )}
+                </div>
               </div>
-              <div className="flex-1 overflow-hidden">
-                <TreeView
-                  nodes={parsedData.roots}
-                  selectedNode={selectedNode}
-                  onNodeSelect={setSelectedNode}
-                  expandedNodes={expandedNodes}
-                  onToggleExpand={handleToggleExpand}
-                />
-              </div>
-            </div>
-
-            {/* Grid View Panel */}
-            <div className="flex-1 bg-background flex flex-col">
-              <div className="border-b px-4 py-3 bg-muted/50">
-                <h2 className="font-semibold">Properties Grid</h2>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Edit multiple members • Click any cell to edit • Use filters to find data
-                </p>
-              </div>
-              <div className="flex-1 overflow-hidden p-4">
-                <HierarchyGrid
-                  visibleNodes={visibleNodes}
-                  columns={parsedData.columns}
-                  onPropertyChange={handlePropertyChange}
-                />
-              </div>
-            </div>
-          </div>
+            }
+          />
         )}
       </main>
 
@@ -214,7 +361,7 @@ function App() {
       <footer className="border-t px-6 py-2 text-xs text-muted-foreground bg-card">
         <div className="flex items-center justify-between">
           <span>
-            Supports CSV and Excel files • Expand/collapse tree to control visible rows • Click cells to edit • Filter columns
+            Right-click members for options • Drag divider to resize • Only leaf nodes can be deleted
           </span>
           {parsedData && (
             <span>
@@ -223,6 +370,28 @@ function App() {
           )}
         </div>
       </footer>
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={() => setContextMenu(null)}
+          onViewProperties={handleViewProperties}
+          onDuplicate={() => handleDuplicateNode(contextMenu.node.id)}
+          onDelete={() => handleDeleteNode(contextMenu.node.id)}
+          canDelete={contextMenu.node.children.length === 0}
+        />
+      )}
+
+      {/* Add Member Dialog */}
+      <AddMemberDialog
+        isOpen={showAddDialog}
+        onClose={() => setShowAddDialog(false)}
+        onAdd={handleAddMember}
+        columns={parsedData?.columns || []}
+        existingMembers={existingMemberNames}
+      />
     </div>
   );
 }

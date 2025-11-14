@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import {
   useReactTable,
   getCoreRowModel,
@@ -8,8 +8,9 @@ import {
   type ColumnDef,
   type ColumnFiltersState,
   type SortingState,
+  type RowSelectionState,
 } from '@tanstack/react-table';
-import { ArrowUpDown } from 'lucide-react';
+import { ArrowUpDown, Trash2, Copy } from 'lucide-react';
 import { cn } from '../lib/utils';
 import type { HierarchyNode } from '../types/hierarchy';
 
@@ -17,29 +18,91 @@ interface HierarchyGridProps {
   visibleNodes: HierarchyNode[];
   columns: string[];
   onPropertyChange: (nodeId: string, property: string, value: string) => void;
+  onDeleteNode: (nodeId: string) => void;
+  onDuplicateNode: (nodeId: string) => void;
 }
 
 export function HierarchyGrid({
   visibleNodes,
   columns,
   onPropertyChange,
+  onDeleteNode,
+  onDuplicateNode,
 }: HierarchyGridProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
-  const tableColumns = useMemo<ColumnDef<HierarchyNode>[]>(() => {
-    return columns.map((column) => ({
-      accessorFn: (row) => row.properties[column] || '',
-      id: column,
-      header: ({ column: col }) => {
+  const tableColumns: ColumnDef<HierarchyNode>[] = [
+    {
+      id: 'select',
+      header: ({ table }) => (
+        <input
+          type="checkbox"
+          checked={table.getIsAllPageRowsSelected()}
+          onChange={table.getToggleAllPageRowsSelectedHandler()}
+          className="w-4 h-4 cursor-pointer"
+        />
+      ),
+      cell: ({ row }) => (
+        <input
+          type="checkbox"
+          checked={row.getIsSelected()}
+          onChange={row.getToggleSelectedHandler()}
+          className="w-4 h-4 cursor-pointer"
+        />
+      ),
+      size: 40,
+    },
+    {
+      id: 'actions',
+      header: 'Actions',
+      cell: ({ row }) => {
+        const node = row.original;
+        const isLeaf = node.children.length === 0;
+
         return (
-          <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => onDuplicateNode(node.id)}
+              className={cn(
+                'p-1 rounded hover:bg-accent transition-colors',
+                'text-muted-foreground hover:text-foreground'
+              )}
+              title="Duplicate"
+            >
+              <Copy className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => onDeleteNode(node.id)}
+              disabled={!isLeaf}
+              className={cn(
+                'p-1 rounded transition-colors',
+                isLeaf
+                  ? 'text-muted-foreground hover:text-destructive hover:bg-destructive/10'
+                  : 'text-muted-foreground/30 cursor-not-allowed'
+              )}
+              title={isLeaf ? 'Delete' : 'Cannot delete parent nodes'}
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
+        );
+      },
+      size: 100,
+    },
+    ...columns.map((column): ColumnDef<HierarchyNode> => ({
+      accessorFn: (row: HierarchyNode) => row.properties[column] || '',
+      id: column,
+      header: ({ column: col }: any) => {
+        return (
+          <div className="flex flex-col gap-1.5 min-w-[150px]">
             <button
               onClick={() => col.toggleSorting(col.getIsSorted() === 'asc')}
-              className="flex items-center gap-1 hover:text-foreground transition-colors font-medium"
+              className="flex items-center gap-1 hover:text-foreground transition-colors font-medium text-left"
             >
-              {column}
-              <ArrowUpDown className="h-3 w-3" />
+              <span className="truncate">{column}</span>
+              <ArrowUpDown className="h-3 w-3 flex-shrink-0" />
             </button>
             <input
               type="text"
@@ -55,7 +118,7 @@ export function HierarchyGrid({
           </div>
         );
       },
-      cell: ({ row }) => {
+      cell: ({ row }: any) => {
         const node = row.original;
         const value = node.properties[column] || '';
         const [isEditing, setIsEditing] = useState(false);
@@ -80,7 +143,7 @@ export function HierarchyGrid({
         };
 
         return (
-          <div className="min-w-[100px]">
+          <div className="min-w-[150px]">
             {isEditing ? (
               <input
                 type="text"
@@ -105,8 +168,9 @@ export function HierarchyGrid({
           </div>
         );
       },
-    }));
-  }, [columns, onPropertyChange]);
+      size: Math.max(column.length * 10, 150),
+    })),
+  ];
 
   const table = useReactTable({
     data: visibleNodes,
@@ -116,11 +180,29 @@ export function HierarchyGrid({
     getFilteredRowModel: getFilteredRowModel(),
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
+    onRowSelectionChange: setRowSelection,
+    enableRowSelection: true,
     state: {
       sorting,
       columnFilters,
+      rowSelection,
     },
   });
+
+  const selectedRows = table.getSelectedRowModel().rows;
+
+  const handleDeleteSelected = () => {
+    const leafNodes = selectedRows.filter(row => row.original.children.length === 0);
+    if (leafNodes.length === 0) {
+      alert('Cannot delete selected rows. Only leaf nodes can be deleted.');
+      return;
+    }
+
+    if (confirm(`Delete ${leafNodes.length} selected member(s)? This action cannot be undone.`)) {
+      leafNodes.forEach(row => onDeleteNode(row.original.id));
+      setRowSelection({});
+    }
+  };
 
   if (visibleNodes.length === 0) {
     return (
@@ -132,15 +214,32 @@ export function HierarchyGrid({
 
   return (
     <div className="h-full flex flex-col">
+      {selectedRows.length > 0 && (
+        <div className="mb-2 flex items-center gap-2 p-2 bg-muted/50 rounded-md">
+          <span className="text-sm font-medium">{selectedRows.length} selected</span>
+          <button
+            onClick={handleDeleteSelected}
+            className={cn(
+              'px-3 py-1 text-sm rounded-md',
+              'bg-destructive text-destructive-foreground hover:bg-destructive/90',
+              'transition-colors flex items-center gap-2'
+            )}
+          >
+            <Trash2 className="h-4 w-4" />
+            Delete Selected
+          </button>
+        </div>
+      )}
       <div className="flex-1 overflow-auto border rounded-lg">
-        <table className="w-full text-sm border-collapse">
+        <table className="text-sm border-collapse">
           <thead className="sticky top-0 bg-muted/80 backdrop-blur z-10">
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id}>
                 {headerGroup.headers.map((header) => (
                   <th
                     key={header.id}
-                    className="text-left p-2 border-b border-r last:border-r-0 min-w-[150px]"
+                    className="text-left p-2 border-b border-r last:border-r-0"
+                    style={{ width: header.getSize() }}
                   >
                     {header.isPlaceholder
                       ? null
@@ -156,7 +255,8 @@ export function HierarchyGrid({
                 key={row.id}
                 className={cn(
                   'border-b transition-colors hover:bg-muted/50',
-                  index % 2 === 0 && 'bg-muted/20'
+                  index % 2 === 0 && 'bg-muted/20',
+                  row.getIsSelected() && 'bg-primary/10'
                 )}
               >
                 {row.getVisibleCells().map((cell) => (

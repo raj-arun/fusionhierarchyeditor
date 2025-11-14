@@ -16,6 +16,7 @@ interface TreeViewProps {
   onNodeSelect: (node: HierarchyNode) => void;
   expandedNodes: Set<string>;
   onToggleExpand: (nodeId: string) => void;
+  onContextMenu?: (node: HierarchyNode, x: number, y: number) => void;
 }
 
 interface TreeNodeProps {
@@ -24,14 +25,22 @@ interface TreeNodeProps {
   onSelect: (node: HierarchyNode) => void;
   isExpanded: boolean;
   onToggle: () => void;
+  onContextMenu?: (node: HierarchyNode, x: number, y: number) => void;
 }
 
-function TreeNode({ node, isSelected, onSelect, isExpanded, onToggle }: TreeNodeProps) {
+function TreeNode({ node, isSelected, onSelect, isExpanded, onToggle, onContextMenu }: TreeNodeProps) {
   const hasChildren = node.children.length > 0;
 
   const handleClick = useCallback(() => {
     onSelect(node);
   }, [node, onSelect]);
+
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    if (onContextMenu) {
+      onContextMenu(node, e.clientX, e.clientY);
+    }
+  }, [node, onContextMenu]);
 
   const getIcon = () => {
     if (node.level === 0) {
@@ -77,6 +86,7 @@ function TreeNode({ node, isSelected, onSelect, isExpanded, onToggle }: TreeNode
 
         <div
           onClick={handleClick}
+          onContextMenu={handleContextMenu}
           className="flex items-center gap-2 flex-1 min-w-0"
         >
           {getIcon()}
@@ -93,7 +103,7 @@ function TreeNode({ node, isSelected, onSelect, isExpanded, onToggle }: TreeNode
   );
 }
 
-export function TreeView({ nodes, selectedNode, onNodeSelect, expandedNodes, onToggleExpand }: TreeViewProps) {
+export function TreeView({ nodes, selectedNode, onNodeSelect, expandedNodes, onToggleExpand, onContextMenu }: TreeViewProps) {
   const renderNode = (node: HierarchyNode) => {
     const isExpanded = expandedNodes.has(node.id);
     const hasChildren = node.children.length > 0;
@@ -106,6 +116,7 @@ export function TreeView({ nodes, selectedNode, onNodeSelect, expandedNodes, onT
           onSelect={onNodeSelect}
           isExpanded={isExpanded}
           onToggle={() => onToggleExpand(node.id)}
+          onContextMenu={onContextMenu}
         />
         {hasChildren && isExpanded && (
           <div>
