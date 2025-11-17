@@ -10,6 +10,7 @@ import {
   type SortingState,
   type RowSelectionState,
   type VisibilityState,
+  type ColumnSizingState,
 } from '@tanstack/react-table';
 import { ArrowUpDown, Trash2, Copy, ChevronUp, ChevronsDown, Columns3, Search, FilterX } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -43,6 +44,7 @@ export function HierarchyGrid({
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+  const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
   const [showColumnMenu, setShowColumnMenu] = useState(false);
   const [showSearchReplace, setShowSearchReplace] = useState(false);
   const columnMenuRef = useRef<HTMLDivElement>(null);
@@ -68,6 +70,15 @@ export function HierarchyGrid({
       onColumnVisibilityChange(hidden);
     }
   }, [columnVisibility, columns, onColumnVisibilityChange]);
+
+  // Helper function to check if node has siblings
+  const hasMultipleSiblings = (node: HierarchyNode): boolean => {
+    if (!parsedData || node.children.length > 0) return false;
+    const siblings = node.parent
+      ? parsedData.nodes.get(node.parent)?.children
+      : parsedData.roots;
+    return siblings ? siblings.length > 1 : false;
+  };
 
   // Helper function to determine if a node can move up/down
   const canMoveUp = (node: HierarchyNode): boolean => {
@@ -110,12 +121,13 @@ export function HierarchyGrid({
       cell: ({ row }) => {
         const node = row.original;
         const isLeaf = node.children.length === 0;
+        const hasSiblings = hasMultipleSiblings(node);
         const canUp = canMoveUp(node);
         const canDown = canMoveDown(node);
 
         return (
           <div className="flex items-center gap-1">
-            {isLeaf && onMoveUp && (
+            {isLeaf && hasSiblings && onMoveUp && (
               <button
                 onClick={() => onMoveUp(node.id)}
                 disabled={!canUp}
@@ -130,7 +142,7 @@ export function HierarchyGrid({
                 <ChevronUp className="h-4 w-4" />
               </button>
             )}
-            {isLeaf && onMoveDown && (
+            {isLeaf && hasSiblings && onMoveDown && (
               <button
                 onClick={() => onMoveDown(node.id)}
                 disabled={!canDown}
@@ -267,12 +279,16 @@ export function HierarchyGrid({
     onColumnFiltersChange: setColumnFilters,
     onRowSelectionChange: setRowSelection,
     onColumnVisibilityChange: setColumnVisibility,
+    onColumnSizingChange: setColumnSizing,
     enableRowSelection: true,
+    enableColumnResizing: true,
+    columnResizeMode: 'onChange',
     state: {
       sorting,
       columnFilters,
       rowSelection,
       columnVisibility,
+      columnSizing,
     },
   });
 
@@ -407,12 +423,23 @@ export function HierarchyGrid({
                 {headerGroup.headers.map((header) => (
                   <th
                     key={header.id}
-                    className="text-left p-2 border-b border-r last:border-r-0"
+                    className="text-left p-2 border-b border-r last:border-r-0 relative"
                     style={{ width: header.getSize() }}
                   >
                     {header.isPlaceholder
                       ? null
                       : flexRender(header.column.columnDef.header, header.getContext())}
+                    {header.column.getCanResize() && (
+                      <div
+                        onMouseDown={header.getResizeHandler()}
+                        onTouchStart={header.getResizeHandler()}
+                        className={cn(
+                          'absolute right-0 top-0 h-full w-1 cursor-col-resize select-none touch-none',
+                          'hover:bg-primary hover:w-[2px]',
+                          header.column.getIsResizing() && 'bg-primary w-[2px]'
+                        )}
+                      />
+                    )}
                   </th>
                 ))}
               </tr>
