@@ -48,6 +48,7 @@ export function HierarchyGrid({
   const [showColumnMenu, setShowColumnMenu] = useState(false);
   const [showSearchReplace, setShowSearchReplace] = useState(false);
   const columnMenuRef = useRef<HTMLDivElement>(null);
+  const isExternalUpdate = useRef(false);
 
   // Close column menu when clicking outside
   useEffect(() => {
@@ -70,26 +71,25 @@ export function HierarchyGrid({
       columns.forEach(col => {
         newVisibility[col] = !hiddenColumns.includes(col);
       });
+      // Mark this as an external update to avoid notifying parent
+      isExternalUpdate.current = true;
       setColumnVisibility(newVisibility);
     }
   }, [hiddenColumns, columns]);
 
-  // Notify parent when column visibility changes
+  // Notify parent when column visibility changes (only from user interaction)
   useEffect(() => {
+    // Skip notification if this was triggered by external update (view switch)
+    if (isExternalUpdate.current) {
+      isExternalUpdate.current = false;
+      return;
+    }
+
     if (onColumnVisibilityChange) {
       const hidden = columns.filter(col => columnVisibility[col] === false);
-      // Only notify if different from current hiddenColumns to avoid loops
-      const currentHidden = hiddenColumns || [];
-      const isDifferent =
-        hidden.length !== currentHidden.length ||
-        hidden.some(col => !currentHidden.includes(col)) ||
-        currentHidden.some(col => !hidden.includes(col));
-
-      if (isDifferent) {
-        onColumnVisibilityChange(hidden);
-      }
+      onColumnVisibilityChange(hidden);
     }
-  }, [columnVisibility, columns, onColumnVisibilityChange, hiddenColumns]);
+  }, [columnVisibility, columns, onColumnVisibilityChange]);
 
   // Helper function to check if node has siblings
   const hasMultipleSiblings = (node: HierarchyNode): boolean => {
