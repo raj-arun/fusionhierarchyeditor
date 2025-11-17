@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { Download, Network, ChevronsRight, ChevronsDown, Plus, Grid3x3, User } from 'lucide-react';
 import { ThemeToggle } from './components/theme-toggle';
 import { FileUpload } from './components/file-upload';
@@ -9,12 +9,17 @@ import { ResizablePane } from './components/resizable-pane';
 import { ContextMenu } from './components/context-menu';
 import { AddMemberDialog } from './components/add-member-dialog';
 import { ExportDialog } from './components/export-dialog';
+import { ViewSelector } from './components/view-selector';
+import { SaveViewDialog } from './components/save-view-dialog';
+import { ManageViewsDialog } from './components/manage-views-dialog';
 import { exportToCSV, exportToExcel } from './lib/fileExporter';
 import { getVisibleNodes, getAllNodeIds } from './lib/hierarchyUtils';
 import { addMemberToHierarchy, deleteNodeFromHierarchy, duplicateNode, generateUniqueName, moveNodeUp, moveNodeDown } from './lib/nodeOperations';
 import { moveNodeToNewParent } from './lib/dragDropOperations';
 import { cn } from './lib/utils';
 import type { HierarchyNode, ParsedData } from './types/hierarchy';
+import type { ColumnView } from './types/views';
+import { initializeViews, loadViews, getActiveViewId, setActiveViewId, createView, updateView, deleteView, createDefaultView } from './lib/viewsService';
 
 type ViewMode = 'grid' | 'single';
 
@@ -32,6 +37,19 @@ function App() {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [hiddenColumns, setHiddenColumns] = useState<string[]>([]);
+  const [views, setViews] = useState<ColumnView[]>([]);
+  const [currentViewId, setCurrentViewId] = useState<string>('default');
+  const [showSaveViewDialog, setShowSaveViewDialog] = useState(false);
+  const [showManageViewsDialog, setShowManageViewsDialog] = useState(false);
+  const [viewToRename, setViewToRename] = useState<ColumnView | null>(null);
+
+  // Get current view
+  const currentView = useMemo(() => {
+    const view = views.find(v => v.id === currentViewId);
+    if (view) return view;
+    // Fallback to default view if current view not found
+    return views.find(v => v.isDefault) || createDefaultView([]);
+  }, [views, currentViewId]);
 
   const handleDataLoaded = useCallback((data: ParsedData) => {
     setParsedData(data);
@@ -39,6 +57,14 @@ function App() {
     setShowUpload(false);
     // Start with all nodes collapsed
     setExpandedNodes(new Set());
+
+    // Initialize views with default view
+    const initializedViews = initializeViews(data.columns);
+    setViews(initializedViews);
+
+    // Load and set active view
+    const activeViewId = getActiveViewId();
+    setCurrentViewId(activeViewId);
   }, []);
 
   const handlePropertyChange = useCallback(
@@ -260,6 +286,89 @@ function App() {
     }
   }, [parsedData, expandedNodes]);
 
+  // View management handlers
+  const handleSelectView = useCallback((viewId: string) => {
+    setCurrentViewId(viewId);
+    setActiveViewId(viewId);
+  }, []);
+
+  const handleSaveNewView = useCallback((application: string, instance: string, dimension: string, name: string) => {
+    if (!parsedData) return;
+
+    // Get current column visibility from hiddenColumns
+    const columnVisibility: Record<string, boolean> = {};
+    parsedData.columns.forEach(col => {
+      columnVisibility[col] = !hiddenColumns.includes(col);
+    });
+
+    const result = createView(application, instance, dimension, name, columnVisibility);
+    if ('error' in result) {
+      alert(result.error);
+    } else {
+      // Reload views and switch to the new view
+      const updatedViews = loadViews();
+      setViews(updatedViews);
+      handleSelectView(result.id);
+    }
+  }, [parsedData, hiddenColumns, handleSelectView]);
+
+  const handleUpdateCurrentView = useCallback(() => {
+    if (!parsedData || currentView.isDefault) return;
+
+    // Get current column visibility from hiddenColumns
+    const columnVisibility: Record<string, boolean> = {};
+    parsedData.columns.forEach(col => {
+      columnVisibility[col] = !hiddenColumns.includes(col);
+    });
+
+    const success = updateView(currentView.id, { columnVisibility });
+    if (success) {
+      // Reload views
+      const updatedViews = loadViews();
+      setViews(updatedViews);
+    }
+  }, [parsedData, currentView, hiddenColumns]);
+
+  const handleRenameView = useCallback((application: string, instance: string, dimension: string, name: string) => {
+    if (!viewToRename) return;
+
+    const success = updateView(viewToRename.id, { application, instance, dimension, name });
+    if (success) {
+      // Reload views
+      const updatedViews = loadViews();
+      setViews(updatedViews);
+      setViewToRename(null);
+    }
+  }, [viewToRename]);
+
+  const handleDeleteView = useCallback((viewId: string) => {
+    const success = deleteView(viewId);
+    if (success) {
+      // Reload views
+      const updatedViews = loadViews();
+      setViews(updatedViews);
+    }
+  }, []);
+
+  const handleManageViewsRename = useCallback((view: ColumnView) => {
+    setViewToRename(view);
+    setShowManageViewsDialog(false);
+    setShowSaveViewDialog(true);
+  }, []);
+
+  // Apply current view's column visibility
+  useEffect(() => {
+    if (!parsedData || !currentView) return;
+
+    const hidden: string[] = [];
+    parsedData.columns.forEach(col => {
+      if (currentView.columnVisibility[col] === false) {
+        hidden.push(col);
+      }
+    });
+    setHiddenColumns(hidden);
+  }, [currentView, parsedData]);
+
   const visibleNodes = useMemo(() => {
     if (!parsedData) return [];
     return getVisibleNodes(parsedData.roots, expandedNodes);
@@ -288,6 +397,18 @@ function App() {
           <div className="flex items-center gap-2">
             {parsedData && (
               <>
+                <ViewSelector
+                  views={views}
+                  currentView={currentView}
+                  onSelectView={handleSelectView}
+                  onSaveNewView={() => {
+                    setViewToRename(null);
+                    setShowSaveViewDialog(true);
+                  }}
+                  onUpdateCurrentView={handleUpdateCurrentView}
+                  onManageViews={() => setShowManageViewsDialog(true)}
+                />
+                <div className="h-6 w-px bg-border mx-1" />
                 <button
                   onClick={() => setShowAddDialog(true)}
                   className={cn(
@@ -497,6 +618,31 @@ function App() {
         onClose={() => setShowExportDialog(false)}
         onExport={handleExport}
         hasHiddenColumns={hiddenColumns.length > 0}
+      />
+
+      {/* Save View Dialog */}
+      <SaveViewDialog
+        isOpen={showSaveViewDialog}
+        onClose={() => {
+          setShowSaveViewDialog(false);
+          setViewToRename(null);
+        }}
+        onSave={viewToRename ? handleRenameView : handleSaveNewView}
+        existingView={viewToRename ? {
+          application: viewToRename.application,
+          instance: viewToRename.instance,
+          dimension: viewToRename.dimension,
+          name: viewToRename.name,
+        } : undefined}
+      />
+
+      {/* Manage Views Dialog */}
+      <ManageViewsDialog
+        isOpen={showManageViewsDialog}
+        onClose={() => setShowManageViewsDialog(false)}
+        views={views}
+        onRenameView={handleManageViewsRename}
+        onDeleteView={handleDeleteView}
       />
     </div>
   );
