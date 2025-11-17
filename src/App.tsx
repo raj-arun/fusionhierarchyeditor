@@ -560,6 +560,7 @@ function App() {
                       onMoveDown={handleMoveNodeDown}
                       parsedData={parsedData}
                       onColumnVisibilityChange={setHiddenColumns}
+                      hiddenColumns={hiddenColumns}
                     />
                   ) : (
                     <PropertiesGrid

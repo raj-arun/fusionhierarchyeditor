@@ -26,6 +26,7 @@ interface HierarchyGridProps {
   onMoveDown?: (nodeId: string) => void;
   parsedData?: ParsedData;
   onColumnVisibilityChange?: (hiddenColumns: string[]) => void;
+  hiddenColumns?: string[];
 }
 
 export function HierarchyGrid({
@@ -38,6 +39,7 @@ export function HierarchyGrid({
   onMoveDown,
   parsedData,
   onColumnVisibilityChange,
+  hiddenColumns,
 }: HierarchyGridProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
@@ -61,13 +63,33 @@ export function HierarchyGrid({
     }
   }, [showColumnMenu]);
 
+  // Sync internal column visibility with external hiddenColumns prop
+  useEffect(() => {
+    if (hiddenColumns) {
+      const newVisibility: VisibilityState = {};
+      columns.forEach(col => {
+        newVisibility[col] = !hiddenColumns.includes(col);
+      });
+      setColumnVisibility(newVisibility);
+    }
+  }, [hiddenColumns, columns]);
+
   // Notify parent when column visibility changes
   useEffect(() => {
     if (onColumnVisibilityChange) {
       const hidden = columns.filter(col => columnVisibility[col] === false);
-      onColumnVisibilityChange(hidden);
+      // Only notify if different from current hiddenColumns to avoid loops
+      const currentHidden = hiddenColumns || [];
+      const isDifferent =
+        hidden.length !== currentHidden.length ||
+        hidden.some(col => !currentHidden.includes(col)) ||
+        currentHidden.some(col => !hidden.includes(col));
+
+      if (isDifferent) {
+        onColumnVisibilityChange(hidden);
+      }
     }
-  }, [columnVisibility, columns, onColumnVisibilityChange]);
+  }, [columnVisibility, columns, onColumnVisibilityChange, hiddenColumns]);
 
   // Helper function to check if node has siblings
   const hasMultipleSiblings = (node: HierarchyNode): boolean => {
