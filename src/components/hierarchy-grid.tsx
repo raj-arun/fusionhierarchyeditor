@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   useReactTable,
   getCoreRowModel,
@@ -75,7 +75,7 @@ export function HierarchyGrid({
     const siblings = node.parent
       ? parsedData.nodes.get(node.parent)?.children
       : parsedData.roots;
-    if (!siblings) return false;
+    if (!siblings || siblings.length <= 1) return false; // Disable if only child
     const index = siblings.findIndex(n => n.id === node.id);
     return index > 0;
   };
@@ -85,12 +85,12 @@ export function HierarchyGrid({
     const siblings = node.parent
       ? parsedData.nodes.get(node.parent)?.children
       : parsedData.roots;
-    if (!siblings) return false;
+    if (!siblings || siblings.length <= 1) return false; // Disable if only child
     const index = siblings.findIndex(n => n.id === node.id);
     return index >= 0 && index < siblings.length - 1;
   };
 
-  const tableColumns: ColumnDef<HierarchyNode>[] = [
+  const tableColumns: ColumnDef<HierarchyNode>[] = useMemo(() => [
     {
       id: 'select',
       header: ({ table }) => (
@@ -262,7 +262,7 @@ export function HierarchyGrid({
       },
       size: Math.max(column.length * 10, 150),
     })),
-  ];
+  ], [columns, onPropertyChange, onDeleteNode, onDuplicateNode, onMoveUp, onMoveDown, parsedData]);
 
   const table = useReactTable({
     data: visibleNodes,
@@ -285,7 +285,7 @@ export function HierarchyGrid({
 
   const selectedRows = table.getSelectedRowModel().rows;
 
-  const handleDeleteSelected = () => {
+  const handleDeleteSelected = useCallback(() => {
     const leafNodes = selectedRows.filter(row => row.original.children.length === 0);
     if (leafNodes.length === 0) {
       alert('Cannot delete selected rows. Only leaf nodes can be deleted.');
@@ -296,9 +296,9 @@ export function HierarchyGrid({
       leafNodes.forEach(row => onDeleteNode(row.original.id));
       setRowSelection({});
     }
-  };
+  }, [selectedRows, onDeleteNode]);
 
-  const handleSearchReplace = (column: string, searchText: string, replaceText: string): number => {
+  const handleSearchReplace = useCallback((column: string, searchText: string, replaceText: string): number => {
     let count = 0;
     visibleNodes.forEach(node => {
       const currentValue = node.properties[column] || '';
@@ -309,7 +309,7 @@ export function HierarchyGrid({
       }
     });
     return count;
-  };
+  }, [visibleNodes, onPropertyChange]);
 
   if (visibleNodes.length === 0) {
     return (

@@ -115,6 +115,14 @@ export function ExportDialog({
             </div>
           )}
 
+          <div className="p-2 bg-muted/20 rounded-md">
+            <div className="text-xs text-muted-foreground">
+              {typeof (window as any).electronAPI !== 'undefined'
+                ? 'The file will be saved to your chosen location.'
+                : 'The file will be saved to your browser\'s default download folder.'}
+            </div>
+          </div>
+
           <div className="flex gap-2 justify-end pt-2">
             <button
               onClick={handleClose}

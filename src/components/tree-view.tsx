@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState, memo } from 'react';
 import {
   ChevronRight,
   ChevronDown,
@@ -41,7 +41,7 @@ interface TreeNodeProps {
   canMoveDown?: boolean;
 }
 
-function TreeNode({
+const TreeNode = memo(function TreeNode({
   node,
   isSelected,
   onSelect,
@@ -199,7 +199,9 @@ function TreeNode({
 
     </div>
   );
-}
+});
+
+TreeNode.displayName = 'TreeNode';
 
 export function TreeView({
   nodes,
@@ -262,8 +264,9 @@ export function TreeView({
     const isLeaf = !hasChildren;
 
     // Determine if node can move up/down within siblings
-    const canMoveUp = isLeaf && index > 0;
-    const canMoveDown = isLeaf && index < siblings.length - 1;
+    // Disable if only one child in the parent
+    const canMoveUp = isLeaf && siblings.length > 1 && index > 0;
+    const canMoveDown = isLeaf && siblings.length > 1 && index < siblings.length - 1;
 
     return (
       <div key={node.id} onDragEnd={handleDragEnd}>
