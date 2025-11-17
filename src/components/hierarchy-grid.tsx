@@ -10,7 +10,6 @@ import {
   type SortingState,
   type RowSelectionState,
   type VisibilityState,
-  type ColumnSizingState,
 } from '@tanstack/react-table';
 import { ArrowUpDown, Trash2, Copy, ChevronUp, ChevronsDown, Columns3, Search, FilterX } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -44,7 +43,6 @@ export function HierarchyGrid({
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
-  const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
   const [showColumnMenu, setShowColumnMenu] = useState(false);
   const [showSearchReplace, setShowSearchReplace] = useState(false);
   const columnMenuRef = useRef<HTMLDivElement>(null);
@@ -279,16 +277,12 @@ export function HierarchyGrid({
     onColumnFiltersChange: setColumnFilters,
     onRowSelectionChange: setRowSelection,
     onColumnVisibilityChange: setColumnVisibility,
-    onColumnSizingChange: setColumnSizing,
     enableRowSelection: true,
-    enableColumnResizing: true,
-    columnResizeMode: 'onChange',
     state: {
       sorting,
       columnFilters,
       rowSelection,
       columnVisibility,
-      columnSizing,
     },
   });
 
@@ -423,23 +417,12 @@ export function HierarchyGrid({
                 {headerGroup.headers.map((header) => (
                   <th
                     key={header.id}
-                    className="text-left p-2 border-b border-r last:border-r-0 relative"
+                    className="text-left p-2 border-b border-r last:border-r-0"
                     style={{ width: header.getSize() }}
                   >
                     {header.isPlaceholder
                       ? null
                       : flexRender(header.column.columnDef.header, header.getContext())}
-                    {header.column.getCanResize() && (
-                      <div
-                        onMouseDown={header.getResizeHandler()}
-                        onTouchStart={header.getResizeHandler()}
-                        className={cn(
-                          'absolute right-0 top-0 h-full w-1 cursor-col-resize select-none touch-none',
-                          'hover:bg-primary hover:w-[2px]',
-                          header.column.getIsResizing() && 'bg-primary w-[2px]'
-                        )}
-                      />
-                    )}
                   </th>
                 ))}
               </tr>
