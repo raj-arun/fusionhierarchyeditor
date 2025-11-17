@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { X, FileDown } from 'lucide-react';
+import { X, FileDown, FolderOpen } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 interface ExportDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onExport: (format: 'csv' | 'excel', includeHiddenColumns: boolean, fileName: string) => void;
+  onExport: (format: 'csv' | 'excel', includeHiddenColumns: boolean, fileName: string, filePath?: string) => void;
   hasHiddenColumns: boolean;
 }
 
@@ -18,9 +18,32 @@ export function ExportDialog({
   const [format, setFormat] = useState<'csv' | 'excel'>('csv');
   const [includeHiddenColumns, setIncludeHiddenColumns] = useState(true);
   const [fileName, setFileName] = useState('hierarchy-export');
+  const [selectedPath, setSelectedPath] = useState<string>('');
+
+  const isElectron = typeof (window as any).electronAPI !== 'undefined';
+
+  const handleChooseLocation = async () => {
+    if (!isElectron) return;
+
+    const extension = format === 'csv' ? '.csv' : '.xlsx';
+    const fullFileName = fileName.endsWith(extension) ? fileName : `${fileName}${extension}`;
+
+    const result = await (window as any).electronAPI.showSaveDialog({
+      defaultPath: fullFileName,
+      filters: [
+        format === 'csv'
+          ? { name: 'CSV Files', extensions: ['csv'] }
+          : { name: 'Excel Files', extensions: ['xlsx'] }
+      ]
+    });
+
+    if (result && !result.canceled && result.filePath) {
+      setSelectedPath(result.filePath);
+    }
+  };
 
   const handleExport = () => {
-    onExport(format, includeHiddenColumns, fileName);
+    onExport(format, includeHiddenColumns, fileName, selectedPath || undefined);
     onClose();
   };
 
@@ -29,6 +52,7 @@ export function ExportDialog({
     setFormat('csv');
     setIncludeHiddenColumns(true);
     setFileName('hierarchy-export');
+    setSelectedPath('');
     onClose();
   };
 
@@ -115,13 +139,36 @@ export function ExportDialog({
             </div>
           )}
 
-          <div className="p-2 bg-muted/20 rounded-md">
-            <div className="text-xs text-muted-foreground">
-              {typeof (window as any).electronAPI !== 'undefined'
-                ? 'The file will be saved to your chosen location.'
-                : 'The file will be saved to your browser\'s default download folder.'}
+          {isElectron && (
+            <div>
+              <label className="block text-sm font-medium mb-2">Save Location</label>
+              <button
+                onClick={handleChooseLocation}
+                type="button"
+                className={cn(
+                  'w-full px-3 py-2 border rounded-md',
+                  'hover:bg-accent transition-colors flex items-center gap-2 justify-center'
+                )}
+              >
+                <FolderOpen className="h-4 w-4" />
+                Choose Location
+              </button>
+              {selectedPath && (
+                <div className="mt-2 p-2 bg-muted/30 rounded-md">
+                  <div className="text-xs font-medium text-muted-foreground mb-1">Selected:</div>
+                  <div className="text-xs break-all">{selectedPath}</div>
+                </div>
+              )}
             </div>
-          </div>
+          )}
+
+          {!isElectron && (
+            <div className="p-2 bg-muted/20 rounded-md">
+              <div className="text-xs text-muted-foreground">
+                The file will be saved to your browser's default download folder.
+              </div>
+            </div>
+          )}
 
           <div className="flex gap-2 justify-end pt-2">
             <button

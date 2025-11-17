@@ -58,7 +58,7 @@ function App() {
     [parsedData, selectedNode]
   );
 
-  const handleExport = useCallback(async (format: 'csv' | 'excel', includeHiddenColumns: boolean, fileName: string) => {
+  const handleExport = useCallback(async (format: 'csv' | 'excel', includeHiddenColumns: boolean, fileName: string, filePath?: string) => {
     if (!parsedData) return;
 
     // Determine which columns to export
@@ -71,11 +71,61 @@ function App() {
     const extension = format === 'csv' ? '.csv' : '.xlsx';
     const fullFileName = fileName.endsWith(extension) ? fileName : `${fileName}${extension}`;
 
-    // Export based on format
-    if (format === 'csv') {
-      exportToCSV(parsedData.roots, columnsToExport, fullFileName);
+    // Check if we're in Electron with a chosen path
+    const isElectron = typeof (window as any).electronAPI !== 'undefined';
+
+    if (isElectron && filePath) {
+      // Export to the chosen location using Electron API
+      try {
+        if (format === 'csv') {
+          // Generate CSV content
+          const Papa = await import('papaparse');
+          const { flattenHierarchy } = await import('./lib/fileExporter');
+          const rows = flattenHierarchy(parsedData.roots, columnsToExport);
+          const csv = Papa.default.unparse({
+            fields: columnsToExport,
+            data: rows,
+          });
+
+          await (window as any).electronAPI.saveFile({ filePath, content: csv });
+        } else {
+          // Generate Excel content
+          const ExcelJS = await import('exceljs');
+          const { flattenHierarchy } = await import('./lib/fileExporter');
+          const rows = flattenHierarchy(parsedData.roots, columnsToExport);
+
+          const workbook = new ExcelJS.default.Workbook();
+          const worksheet = workbook.addWorksheet('Hierarchy');
+
+          worksheet.addRow(columnsToExport);
+          rows.forEach(row => worksheet.addRow(row));
+
+          worksheet.columns = columnsToExport.map((col, i) => {
+            const columnData = [col, ...rows.map((row) => row[i] || '')];
+            const maxWidth = Math.max(...columnData.map((cell) => String(cell).length));
+            return {
+              header: col,
+              key: col,
+              width: Math.min(maxWidth + 2, 50)
+            };
+          });
+
+          worksheet.getRow(1).font = { bold: true };
+
+          const buffer = await workbook.xlsx.writeBuffer();
+          await (window as any).electronAPI.saveFile({ filePath, content: Buffer.from(buffer) });
+        }
+      } catch (error) {
+        console.error('Export error:', error);
+        alert('Failed to export file. Please try again.');
+      }
     } else {
-      await exportToExcel(parsedData.roots, columnsToExport, fullFileName);
+      // Browser mode or no path chosen - use standard download
+      if (format === 'csv') {
+        exportToCSV(parsedData.roots, columnsToExport, fullFileName);
+      } else {
+        await exportToExcel(parsedData.roots, columnsToExport, fullFileName);
+      }
     }
   }, [parsedData, hiddenColumns]);
 

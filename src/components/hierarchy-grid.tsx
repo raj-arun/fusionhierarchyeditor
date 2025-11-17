@@ -11,7 +11,7 @@ import {
   type RowSelectionState,
   type VisibilityState,
 } from '@tanstack/react-table';
-import { ArrowUpDown, Trash2, Copy, ChevronUp, ChevronsDown, Columns3, Search } from 'lucide-react';
+import { ArrowUpDown, Trash2, Copy, ChevronUp, ChevronsDown, Columns3, Search, FilterX } from 'lucide-react';
 import { cn } from '../lib/utils';
 import type { HierarchyNode, ParsedData } from '../types/hierarchy';
 import { SearchReplaceDialog } from './search-replace-dialog';
@@ -93,14 +93,7 @@ export function HierarchyGrid({
   const tableColumns: ColumnDef<HierarchyNode>[] = useMemo(() => [
     {
       id: 'select',
-      header: ({ table }) => (
-        <input
-          type="checkbox"
-          checked={table.getIsAllPageRowsSelected()}
-          onChange={table.getToggleAllPageRowsSelectedHandler()}
-          className="w-4 h-4 cursor-pointer"
-        />
-      ),
+      header: 'Select',
       cell: ({ row }) => (
         <input
           type="checkbox"
@@ -311,6 +304,10 @@ export function HierarchyGrid({
     return count;
   }, [visibleNodes, onPropertyChange]);
 
+  const handleClearFilters = useCallback(() => {
+    setColumnFilters([]);
+  }, []);
+
   if (visibleNodes.length === 0) {
     return (
       <div className="flex items-center justify-center h-full text-muted-foreground">
@@ -339,6 +336,20 @@ export function HierarchyGrid({
           </div>
         )}
         <div className="ml-auto flex items-center gap-2">
+          {columnFilters.length > 0 && (
+            <button
+              onClick={handleClearFilters}
+              className={cn(
+                'px-3 py-1.5 text-sm rounded-md border',
+                'hover:bg-accent transition-colors flex items-center gap-2',
+                'bg-muted/50'
+              )}
+              title={`Clear ${columnFilters.length} active filter${columnFilters.length > 1 ? 's' : ''}`}
+            >
+              <FilterX className="h-4 w-4" />
+              Clear Filters ({columnFilters.length})
+            </button>
+          )}
           <button
             onClick={() => setShowSearchReplace(true)}
             className={cn(
