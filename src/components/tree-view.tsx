@@ -6,6 +6,8 @@ import {
   FolderOpen,
   FileText,
   Network,
+  ChevronUp,
+  ChevronsDown,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import type { HierarchyNode } from '../types/hierarchy';
@@ -18,6 +20,8 @@ interface TreeViewProps {
   onToggleExpand: (nodeId: string) => void;
   onContextMenu?: (node: HierarchyNode, x: number, y: number) => void;
   onNodeMove?: (nodeId: string, newParentId: string | null) => void;
+  onMoveUp?: (nodeId: string) => void;
+  onMoveDown?: (nodeId: string) => void;
 }
 
 interface TreeNodeProps {
@@ -31,6 +35,10 @@ interface TreeNodeProps {
   onDragOver?: (nodeId: string, node: HierarchyNode) => void;
   onDrop?: (nodeId: string, node: HierarchyNode) => void;
   isDragOver?: boolean;
+  onMoveUp?: (nodeId: string) => void;
+  onMoveDown?: (nodeId: string) => void;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
 }
 
 function TreeNode({
@@ -44,8 +52,13 @@ function TreeNode({
   onDragOver,
   onDrop,
   isDragOver,
+  onMoveUp,
+  onMoveDown,
+  canMoveUp,
+  canMoveDown,
 }: TreeNodeProps) {
   const hasChildren = node.children.length > 0;
+  const isLeaf = !hasChildren;
 
   const handleClick = useCallback(() => {
     onSelect(node);
@@ -144,6 +157,44 @@ function TreeNode({
             </span>
           )}
         </div>
+
+        {/* Move up/down buttons for leaf nodes */}
+        {isLeaf && (onMoveUp || onMoveDown) && (
+          <div className="flex items-center gap-0.5 ml-auto">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (onMoveUp && canMoveUp) {
+                  onMoveUp(node.id);
+                }
+              }}
+              disabled={!canMoveUp}
+              className={cn(
+                'p-0.5 rounded hover:bg-accent/50 transition-colors',
+                canMoveUp ? 'opacity-100' : 'opacity-30 cursor-not-allowed'
+              )}
+              title={canMoveUp ? 'Move up' : 'Already at top'}
+            >
+              <ChevronUp className="h-3 w-3" />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (onMoveDown && canMoveDown) {
+                  onMoveDown(node.id);
+                }
+              }}
+              disabled={!canMoveDown}
+              className={cn(
+                'p-0.5 rounded hover:bg-accent/50 transition-colors',
+                canMoveDown ? 'opacity-100' : 'opacity-30 cursor-not-allowed'
+              )}
+              title={canMoveDown ? 'Move down' : 'Already at bottom'}
+            >
+              <ChevronsDown className="h-3 w-3" />
+            </button>
+          </div>
+        )}
       </div>
 
     </div>
@@ -158,6 +209,8 @@ export function TreeView({
   onToggleExpand,
   onContextMenu,
   onNodeMove,
+  onMoveUp,
+  onMoveDown,
 }: TreeViewProps) {
   const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
   const [dragOverNodeId, setDragOverNodeId] = useState<string | null>(null);
@@ -202,10 +255,15 @@ export function TreeView({
     setDragOverNodeId(null);
   }, []);
 
-  const renderNode = (node: HierarchyNode) => {
+  const renderNode = (node: HierarchyNode, siblings: HierarchyNode[], index: number) => {
     const isExpanded = expandedNodes.has(node.id);
     const hasChildren = node.children.length > 0;
     const isDragOver = dragOverNodeId === node.id;
+    const isLeaf = !hasChildren;
+
+    // Determine if node can move up/down within siblings
+    const canMoveUp = isLeaf && index > 0;
+    const canMoveDown = isLeaf && index < siblings.length - 1;
 
     return (
       <div key={node.id} onDragEnd={handleDragEnd}>
@@ -220,10 +278,14 @@ export function TreeView({
           onDragOver={handleDragOver}
           onDrop={handleDrop}
           isDragOver={isDragOver}
+          onMoveUp={onMoveUp}
+          onMoveDown={onMoveDown}
+          canMoveUp={canMoveUp}
+          canMoveDown={canMoveDown}
         />
         {hasChildren && isExpanded && (
           <div>
-            {node.children.map((child) => renderNode(child))}
+            {node.children.map((child, idx) => renderNode(child, node.children, idx))}
           </div>
         )}
       </div>
@@ -238,7 +300,7 @@ export function TreeView({
         </div>
       ) : (
         <div className="space-y-0.5">
-          {nodes.map((node) => renderNode(node))}
+          {nodes.map((node, idx) => renderNode(node, nodes, idx))}
         </div>
       )}
     </div>

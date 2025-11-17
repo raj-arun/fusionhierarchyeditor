@@ -10,6 +10,7 @@ interface ContextMenuProps {
   onDuplicate: () => void;
   onDelete: () => void;
   canDelete: boolean;
+  canDuplicate: boolean;
 }
 
 export function ContextMenu({
@@ -20,6 +21,7 @@ export function ContextMenu({
   onDuplicate,
   onDelete,
   canDelete,
+  canDuplicate,
 }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -63,10 +65,19 @@ export function ContextMenu({
       </button>
       <button
         onClick={() => {
-          onDuplicate();
-          onClose();
+          if (canDuplicate) {
+            onDuplicate();
+            onClose();
+          }
         }}
-        className="w-full px-3 py-2 text-sm text-left hover:bg-accent transition-colors flex items-center gap-2"
+        disabled={!canDuplicate}
+        className={cn(
+          'w-full px-3 py-2 text-sm text-left transition-colors flex items-center gap-2',
+          canDuplicate
+            ? 'hover:bg-accent'
+            : 'text-muted-foreground/50 cursor-not-allowed'
+        )}
+        title={canDuplicate ? 'Duplicate member' : 'Only leaf nodes can be duplicated'}
       >
         <Copy className="h-4 w-4" />
         Duplicate

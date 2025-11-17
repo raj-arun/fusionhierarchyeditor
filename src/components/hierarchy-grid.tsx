@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   useReactTable,
   getCoreRowModel,
@@ -9,10 +9,12 @@ import {
   type ColumnFiltersState,
   type SortingState,
   type RowSelectionState,
+  type VisibilityState,
 } from '@tanstack/react-table';
-import { ArrowUpDown, Trash2, Copy } from 'lucide-react';
+import { ArrowUpDown, Trash2, Copy, ChevronUp, ChevronsDown, Columns3, Search } from 'lucide-react';
 import { cn } from '../lib/utils';
-import type { HierarchyNode } from '../types/hierarchy';
+import type { HierarchyNode, ParsedData } from '../types/hierarchy';
+import { SearchReplaceDialog } from './search-replace-dialog';
 
 interface HierarchyGridProps {
   visibleNodes: HierarchyNode[];
@@ -20,6 +22,9 @@ interface HierarchyGridProps {
   onPropertyChange: (nodeId: string, property: string, value: string) => void;
   onDeleteNode: (nodeId: string) => void;
   onDuplicateNode: (nodeId: string) => void;
+  onMoveUp?: (nodeId: string) => void;
+  onMoveDown?: (nodeId: string) => void;
+  parsedData?: ParsedData;
 }
 
 export function HierarchyGrid({
@@ -28,10 +33,52 @@ export function HierarchyGrid({
   onPropertyChange,
   onDeleteNode,
   onDuplicateNode,
+  onMoveUp,
+  onMoveDown,
+  parsedData,
 }: HierarchyGridProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+  const [showColumnMenu, setShowColumnMenu] = useState(false);
+  const [showSearchReplace, setShowSearchReplace] = useState(false);
+  const columnMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close column menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (columnMenuRef.current && !columnMenuRef.current.contains(e.target as Node)) {
+        setShowColumnMenu(false);
+      }
+    };
+
+    if (showColumnMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showColumnMenu]);
+
+  // Helper function to determine if a node can move up/down
+  const canMoveUp = (node: HierarchyNode): boolean => {
+    if (!parsedData || node.children.length > 0) return false;
+    const siblings = node.parent
+      ? parsedData.nodes.get(node.parent)?.children
+      : parsedData.roots;
+    if (!siblings) return false;
+    const index = siblings.findIndex(n => n.id === node.id);
+    return index > 0;
+  };
+
+  const canMoveDown = (node: HierarchyNode): boolean => {
+    if (!parsedData || node.children.length > 0) return false;
+    const siblings = node.parent
+      ? parsedData.nodes.get(node.parent)?.children
+      : parsedData.roots;
+    if (!siblings) return false;
+    const index = siblings.findIndex(n => n.id === node.id);
+    return index >= 0 && index < siblings.length - 1;
+  };
 
   const tableColumns: ColumnDef<HierarchyNode>[] = [
     {
@@ -60,16 +107,51 @@ export function HierarchyGrid({
       cell: ({ row }) => {
         const node = row.original;
         const isLeaf = node.children.length === 0;
+        const canUp = canMoveUp(node);
+        const canDown = canMoveDown(node);
 
         return (
           <div className="flex items-center gap-1">
+            {isLeaf && onMoveUp && (
+              <button
+                onClick={() => onMoveUp(node.id)}
+                disabled={!canUp}
+                className={cn(
+                  'p-1 rounded transition-colors',
+                  canUp
+                    ? 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                    : 'text-muted-foreground/30 cursor-not-allowed'
+                )}
+                title={canUp ? 'Move up' : 'Already at top'}
+              >
+                <ChevronUp className="h-4 w-4" />
+              </button>
+            )}
+            {isLeaf && onMoveDown && (
+              <button
+                onClick={() => onMoveDown(node.id)}
+                disabled={!canDown}
+                className={cn(
+                  'p-1 rounded transition-colors',
+                  canDown
+                    ? 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                    : 'text-muted-foreground/30 cursor-not-allowed'
+                )}
+                title={canDown ? 'Move down' : 'Already at bottom'}
+              >
+                <ChevronsDown className="h-4 w-4" />
+              </button>
+            )}
             <button
               onClick={() => onDuplicateNode(node.id)}
+              disabled={!isLeaf}
               className={cn(
-                'p-1 rounded hover:bg-accent transition-colors',
-                'text-muted-foreground hover:text-foreground'
+                'p-1 rounded transition-colors',
+                isLeaf
+                  ? 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                  : 'text-muted-foreground/30 cursor-not-allowed'
               )}
-              title="Duplicate"
+              title={isLeaf ? 'Duplicate' : 'Only leaf nodes can be duplicated'}
             >
               <Copy className="h-4 w-4" />
             </button>
@@ -89,7 +171,7 @@ export function HierarchyGrid({
           </div>
         );
       },
-      size: 100,
+      size: 140,
     },
     ...columns.map((column): ColumnDef<HierarchyNode> => ({
       accessorFn: (row: HierarchyNode) => row.properties[column] || '',
@@ -181,11 +263,13 @@ export function HierarchyGrid({
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onRowSelectionChange: setRowSelection,
+    onColumnVisibilityChange: setColumnVisibility,
     enableRowSelection: true,
     state: {
       sorting,
       columnFilters,
       rowSelection,
+      columnVisibility,
     },
   });
 
@@ -204,6 +288,19 @@ export function HierarchyGrid({
     }
   };
 
+  const handleSearchReplace = (column: string, searchText: string, replaceText: string): number => {
+    let count = 0;
+    visibleNodes.forEach(node => {
+      const currentValue = node.properties[column] || '';
+      if (currentValue.includes(searchText)) {
+        const newValue = currentValue.replace(new RegExp(searchText, 'g'), replaceText);
+        onPropertyChange(node.id, column, newValue);
+        count++;
+      }
+    });
+    return count;
+  };
+
   if (visibleNodes.length === 0) {
     return (
       <div className="flex items-center justify-center h-full text-muted-foreground">
@@ -214,22 +311,71 @@ export function HierarchyGrid({
 
   return (
     <div className="h-full flex flex-col">
-      {selectedRows.length > 0 && (
-        <div className="mb-2 flex items-center gap-2 p-2 bg-muted/50 rounded-md">
-          <span className="text-sm font-medium">{selectedRows.length} selected</span>
+      <div className="mb-2 flex items-center gap-2">
+        {selectedRows.length > 0 && (
+          <div className="flex items-center gap-2 p-2 bg-muted/50 rounded-md">
+            <span className="text-sm font-medium">{selectedRows.length} selected</span>
+            <button
+              onClick={handleDeleteSelected}
+              className={cn(
+                'px-3 py-1 text-sm rounded-md',
+                'bg-destructive text-destructive-foreground hover:bg-destructive/90',
+                'transition-colors flex items-center gap-2'
+              )}
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete Selected
+            </button>
+          </div>
+        )}
+        <div className="ml-auto flex items-center gap-2">
           <button
-            onClick={handleDeleteSelected}
+            onClick={() => setShowSearchReplace(true)}
             className={cn(
-              'px-3 py-1 text-sm rounded-md',
-              'bg-destructive text-destructive-foreground hover:bg-destructive/90',
-              'transition-colors flex items-center gap-2'
+              'px-3 py-1.5 text-sm rounded-md border',
+              'hover:bg-accent transition-colors flex items-center gap-2'
             )}
           >
-            <Trash2 className="h-4 w-4" />
-            Delete Selected
+            <Search className="h-4 w-4" />
+            Find & Replace
           </button>
+          <div className="relative" ref={columnMenuRef}>
+            <button
+              onClick={() => setShowColumnMenu(!showColumnMenu)}
+              className={cn(
+                'px-3 py-1.5 text-sm rounded-md border',
+                'hover:bg-accent transition-colors flex items-center gap-2'
+              )}
+            >
+              <Columns3 className="h-4 w-4" />
+              Columns
+            </button>
+          {showColumnMenu && (
+            <div className="absolute right-0 top-full mt-1 bg-popover border rounded-md shadow-lg z-20 p-2 min-w-[200px]">
+              <div className="text-xs font-medium mb-2 text-muted-foreground">Show/Hide Columns</div>
+              {table.getAllLeafColumns().map((column) => {
+                // Skip the select and actions columns
+                if (column.id === 'select' || column.id === 'actions') return null;
+                return (
+                  <label
+                    key={column.id}
+                    className="flex items-center gap-2 p-1.5 hover:bg-accent rounded cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={column.getIsVisible()}
+                      onChange={column.getToggleVisibilityHandler()}
+                      className="w-4 h-4 cursor-pointer"
+                    />
+                    <span className="text-sm">{column.id}</span>
+                  </label>
+                );
+              })}
+            </div>
+          )}
+          </div>
         </div>
-      )}
+      </div>
       <div className="flex-1 overflow-auto border rounded-lg">
         <table className="text-sm border-collapse">
           <thead className="sticky top-0 bg-muted/80 backdrop-blur z-10">
@@ -273,6 +419,13 @@ export function HierarchyGrid({
         Showing {table.getFilteredRowModel().rows.length} of {visibleNodes.length} rows
         {columnFilters.length > 0 && ` (${columnFilters.length} filter${columnFilters.length > 1 ? 's' : ''} active)`}
       </div>
+
+      <SearchReplaceDialog
+        isOpen={showSearchReplace}
+        onClose={() => setShowSearchReplace(false)}
+        columns={columns}
+        onReplace={handleSearchReplace}
+      />
     </div>
   );
 }

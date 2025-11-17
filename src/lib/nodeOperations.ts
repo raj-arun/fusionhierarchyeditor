@@ -146,3 +146,55 @@ export function generateUniqueName(baseName: string, existingNames: Set<string>)
 
   return newName;
 }
+
+/**
+ * Move a node up within its parent's children array
+ */
+export function moveNodeUp(parsedData: ParsedData, nodeId: string): ParsedData | null {
+  const node = parsedData.nodes.get(nodeId);
+  if (!node) return null;
+
+  // Get the parent's children array or roots array
+  const siblings = node.parent
+    ? parsedData.nodes.get(node.parent)?.children
+    : parsedData.roots;
+
+  if (!siblings) return null;
+
+  // Find the node's current index
+  const currentIndex = siblings.findIndex(n => n.id === nodeId);
+  if (currentIndex <= 0) return null; // Already at the top or not found
+
+  // Swap with the previous sibling
+  [siblings[currentIndex - 1], siblings[currentIndex]] =
+    [siblings[currentIndex], siblings[currentIndex - 1]];
+
+  return { ...parsedData };
+}
+
+/**
+ * Move a node down within its parent's children array
+ */
+export function moveNodeDown(parsedData: ParsedData, nodeId: string): ParsedData | null {
+  const node = parsedData.nodes.get(nodeId);
+  if (!node) return null;
+
+  // Get the parent's children array or roots array
+  const siblings = node.parent
+    ? parsedData.nodes.get(node.parent)?.children
+    : parsedData.roots;
+
+  if (!siblings) return null;
+
+  // Find the node's current index
+  const currentIndex = siblings.findIndex(n => n.id === nodeId);
+  if (currentIndex < 0 || currentIndex >= siblings.length - 1) {
+    return null; // Already at the bottom or not found
+  }
+
+  // Swap with the next sibling
+  [siblings[currentIndex], siblings[currentIndex + 1]] =
+    [siblings[currentIndex + 1], siblings[currentIndex]];
+
+  return { ...parsedData };
+}

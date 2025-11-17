@@ -10,7 +10,7 @@ import { ContextMenu } from './components/context-menu';
 import { AddMemberDialog } from './components/add-member-dialog';
 import { exportToCSV, exportToExcel } from './lib/fileExporter';
 import { getVisibleNodes, getAllNodeIds } from './lib/hierarchyUtils';
-import { addMemberToHierarchy, deleteNodeFromHierarchy, duplicateNode, generateUniqueName } from './lib/nodeOperations';
+import { addMemberToHierarchy, deleteNodeFromHierarchy, duplicateNode, generateUniqueName, moveNodeUp, moveNodeDown } from './lib/nodeOperations';
 import { moveNodeToNewParent } from './lib/dragDropOperations';
 import { cn } from './lib/utils';
 import type { HierarchyNode, ParsedData } from './types/hierarchy';
@@ -147,6 +147,22 @@ function App() {
       alert('Failed to duplicate member. Please try again.');
     }
   }, [parsedData, expandedNodes]);
+
+  const handleMoveNodeUp = useCallback((nodeId: string) => {
+    if (!parsedData) return;
+    const updated = moveNodeUp(parsedData, nodeId);
+    if (updated) {
+      setParsedData(updated);
+    }
+  }, [parsedData]);
+
+  const handleMoveNodeDown = useCallback((nodeId: string) => {
+    if (!parsedData) return;
+    const updated = moveNodeDown(parsedData, nodeId);
+    if (updated) {
+      setParsedData(updated);
+    }
+  }, [parsedData]);
 
   const handleAddMember = useCallback((memberName: string, parentName: string) => {
     if (!parsedData) return;
@@ -308,6 +324,8 @@ function App() {
                     onToggleExpand={handleToggleExpand}
                     onContextMenu={handleContextMenu}
                     onNodeMove={handleNodeMove}
+                    onMoveUp={handleMoveNodeUp}
+                    onMoveDown={handleMoveNodeDown}
                   />
                 </div>
               </div>
@@ -364,6 +382,9 @@ function App() {
                       onPropertyChange={handlePropertyChange}
                       onDeleteNode={handleDeleteNode}
                       onDuplicateNode={handleDuplicateNode}
+                      onMoveUp={handleMoveNodeUp}
+                      onMoveDown={handleMoveNodeDown}
+                      parsedData={parsedData}
                     />
                   ) : (
                     <PropertiesGrid
@@ -403,6 +424,7 @@ function App() {
           onDuplicate={() => handleDuplicateNode(contextMenu.node.id)}
           onDelete={() => handleDeleteNode(contextMenu.node.id)}
           canDelete={contextMenu.node.children.length === 0}
+          canDuplicate={contextMenu.node.children.length === 0}
         />
       )}
 
