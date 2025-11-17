@@ -25,6 +25,7 @@ interface HierarchyGridProps {
   onMoveUp?: (nodeId: string) => void;
   onMoveDown?: (nodeId: string) => void;
   parsedData?: ParsedData;
+  onColumnVisibilityChange?: (hiddenColumns: string[]) => void;
 }
 
 export function HierarchyGrid({
@@ -36,6 +37,7 @@ export function HierarchyGrid({
   onMoveUp,
   onMoveDown,
   parsedData,
+  onColumnVisibilityChange,
 }: HierarchyGridProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
@@ -58,6 +60,14 @@ export function HierarchyGrid({
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
   }, [showColumnMenu]);
+
+  // Notify parent when column visibility changes
+  useEffect(() => {
+    if (onColumnVisibilityChange) {
+      const hidden = columns.filter(col => columnVisibility[col] === false);
+      onColumnVisibilityChange(hidden);
+    }
+  }, [columnVisibility, columns, onColumnVisibilityChange]);
 
   // Helper function to determine if a node can move up/down
   const canMoveUp = (node: HierarchyNode): boolean => {
@@ -353,24 +363,26 @@ export function HierarchyGrid({
           {showColumnMenu && (
             <div className="absolute right-0 top-full mt-1 bg-popover border rounded-md shadow-lg z-20 p-2 min-w-[200px]">
               <div className="text-xs font-medium mb-2 text-muted-foreground">Show/Hide Columns</div>
-              {table.getAllLeafColumns().map((column) => {
-                // Skip the select and actions columns
-                if (column.id === 'select' || column.id === 'actions') return null;
-                return (
-                  <label
-                    key={column.id}
-                    className="flex items-center gap-2 p-1.5 hover:bg-accent rounded cursor-pointer"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={column.getIsVisible()}
-                      onChange={column.getToggleVisibilityHandler()}
-                      className="w-4 h-4 cursor-pointer"
-                    />
-                    <span className="text-sm">{column.id}</span>
-                  </label>
-                );
-              })}
+              <div className="max-h-[300px] overflow-y-auto">
+                {table.getAllLeafColumns().map((column) => {
+                  // Skip the select and actions columns
+                  if (column.id === 'select' || column.id === 'actions') return null;
+                  return (
+                    <label
+                      key={column.id}
+                      className="flex items-center gap-2 p-1.5 hover:bg-accent rounded cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={column.getIsVisible()}
+                        onChange={column.getToggleVisibilityHandler()}
+                        className="w-4 h-4 cursor-pointer"
+                      />
+                      <span className="text-sm">{column.id}</span>
+                    </label>
+                  );
+                })}
+              </div>
             </div>
           )}
           </div>

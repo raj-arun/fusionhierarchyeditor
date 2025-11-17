@@ -8,6 +8,7 @@ import { PropertiesGrid } from './components/properties-grid';
 import { ResizablePane } from './components/resizable-pane';
 import { ContextMenu } from './components/context-menu';
 import { AddMemberDialog } from './components/add-member-dialog';
+import { ExportDialog } from './components/export-dialog';
 import { exportToCSV, exportToExcel } from './lib/fileExporter';
 import { getVisibleNodes, getAllNodeIds } from './lib/hierarchyUtils';
 import { addMemberToHierarchy, deleteNodeFromHierarchy, duplicateNode, generateUniqueName, moveNodeUp, moveNodeDown } from './lib/nodeOperations';
@@ -29,13 +30,15 @@ function App() {
     y: number;
   } | null>(null);
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [hiddenColumns, setHiddenColumns] = useState<string[]>([]);
 
   const handleDataLoaded = useCallback((data: ParsedData) => {
     setParsedData(data);
     setSelectedNode(null);
     setShowUpload(false);
-    // Expand all nodes by default for grid view
-    setExpandedNodes(getAllNodeIds(data.roots));
+    // Start with all nodes collapsed
+    setExpandedNodes(new Set());
   }, []);
 
   const handlePropertyChange = useCallback(
@@ -55,15 +58,26 @@ function App() {
     [parsedData, selectedNode]
   );
 
-  const handleExportCSV = useCallback(() => {
+  const handleExport = useCallback(async (format: 'csv' | 'excel', includeHiddenColumns: boolean, fileName: string) => {
     if (!parsedData) return;
-    exportToCSV(parsedData.roots, parsedData.columns);
-  }, [parsedData]);
 
-  const handleExportExcel = useCallback(async () => {
-    if (!parsedData) return;
-    await exportToExcel(parsedData.roots, parsedData.columns);
-  }, [parsedData]);
+    // Determine which columns to export
+    let columnsToExport = parsedData.columns;
+    if (!includeHiddenColumns && hiddenColumns.length > 0) {
+      columnsToExport = parsedData.columns.filter(col => !hiddenColumns.includes(col));
+    }
+
+    // Add appropriate file extension if not present
+    const extension = format === 'csv' ? '.csv' : '.xlsx';
+    const fullFileName = fileName.endsWith(extension) ? fileName : `${fileName}${extension}`;
+
+    // Export based on format
+    if (format === 'csv') {
+      exportToCSV(parsedData.roots, columnsToExport, fullFileName);
+    } else {
+      await exportToExcel(parsedData.roots, columnsToExport, fullFileName);
+    }
+  }, [parsedData, hiddenColumns]);
 
   const handleNewFile = useCallback(() => {
     setShowUpload(true);
@@ -245,7 +259,7 @@ function App() {
                   New File
                 </button>
                 <button
-                  onClick={handleExportCSV}
+                  onClick={() => setShowExportDialog(true)}
                   className={cn(
                     'px-4 py-2 text-sm font-medium rounded-md',
                     'bg-primary text-primary-foreground hover:bg-primary/90',
@@ -253,18 +267,7 @@ function App() {
                   )}
                 >
                   <Download className="h-4 w-4" />
-                  Export CSV
-                </button>
-                <button
-                  onClick={handleExportExcel}
-                  className={cn(
-                    'px-4 py-2 text-sm font-medium rounded-md',
-                    'bg-primary text-primary-foreground hover:bg-primary/90',
-                    'transition-colors flex items-center gap-2'
-                  )}
-                >
-                  <Download className="h-4 w-4" />
-                  Export Excel
+                  Export
                 </button>
               </>
             )}
@@ -385,6 +388,7 @@ function App() {
                       onMoveUp={handleMoveNodeUp}
                       onMoveDown={handleMoveNodeDown}
                       parsedData={parsedData}
+                      onColumnVisibilityChange={setHiddenColumns}
                     />
                   ) : (
                     <PropertiesGrid
@@ -435,6 +439,14 @@ function App() {
         onAdd={handleAddMember}
         columns={parsedData?.columns || []}
         existingMembers={existingMemberNames}
+      />
+
+      {/* Export Dialog */}
+      <ExportDialog
+        isOpen={showExportDialog}
+        onClose={() => setShowExportDialog(false)}
+        onExport={handleExport}
+        hasHiddenColumns={hiddenColumns.length > 0}
       />
     </div>
   );
