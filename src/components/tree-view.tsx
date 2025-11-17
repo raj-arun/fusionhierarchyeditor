@@ -28,8 +28,8 @@ interface TreeNodeProps {
   onToggle: () => void;
   onContextMenu?: (node: HierarchyNode, x: number, y: number) => void;
   onDragStart?: (nodeId: string) => void;
-  onDragOver?: (nodeId: string) => void;
-  onDrop?: (nodeId: string) => void;
+  onDragOver?: (nodeId: string, node: HierarchyNode) => void;
+  onDrop?: (nodeId: string, node: HierarchyNode) => void;
   isDragOver?: boolean;
 }
 
@@ -72,17 +72,17 @@ function TreeNode({
     e.stopPropagation();
     e.dataTransfer.dropEffect = 'move';
     if (onDragOver) {
-      onDragOver(node.id);
+      onDragOver(node.id, node);
     }
-  }, [node.id, onDragOver]);
+  }, [node, onDragOver]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (onDrop) {
-      onDrop(node.id);
+      onDrop(node.id, node);
     }
-  }, [node.id, onDrop]);
+  }, [node, onDrop]);
 
   const getIcon = () => {
     if (node.level === 0) {
@@ -162,17 +162,36 @@ export function TreeView({
   const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
   const [dragOverNodeId, setDragOverNodeId] = useState<string | null>(null);
 
+  // Helper to find node by ID in the tree
+  const findNode = useCallback((nodeId: string, nodes: HierarchyNode[]): HierarchyNode | null => {
+    for (const node of nodes) {
+      if (node.id === nodeId) return node;
+      const found = findNode(nodeId, node.children);
+      if (found) return found;
+    }
+    return null;
+  }, []);
+
   const handleDragStart = useCallback((nodeId: string) => {
     setDraggedNodeId(nodeId);
   }, []);
 
-  const handleDragOver = useCallback((nodeId: string) => {
-    setDragOverNodeId(nodeId);
+  const handleDragOver = useCallback((nodeId: string, node: HierarchyNode) => {
+    // Only allow drag over if target is not a leaf node (has children or can have children)
+    // Allow root drops (when parent nodes are expanded)
+    if (node.children.length > 0) {
+      setDragOverNodeId(nodeId);
+    } else {
+      setDragOverNodeId(null);
+    }
   }, []);
 
-  const handleDrop = useCallback((targetNodeId: string) => {
+  const handleDrop = useCallback((targetNodeId: string, targetNode: HierarchyNode) => {
     if (draggedNodeId && draggedNodeId !== targetNodeId && onNodeMove) {
-      onNodeMove(draggedNodeId, targetNodeId);
+      // Only allow drop if target is not a leaf node
+      if (targetNode.children.length > 0) {
+        onNodeMove(draggedNodeId, targetNodeId);
+      }
     }
     setDraggedNodeId(null);
     setDragOverNodeId(null);

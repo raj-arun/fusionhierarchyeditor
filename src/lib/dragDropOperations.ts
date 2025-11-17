@@ -14,6 +14,15 @@ export function moveNodeToNewParent(
   // Can't move to self
   if (nodeId === newParentId) return null;
 
+  // Can't drop onto a leaf node (only parent/intermediate nodes can receive children)
+  if (newParentId) {
+    const targetNode = parsedData.nodes.get(newParentId);
+    if (targetNode && targetNode.children.length === 0) {
+      // Target is a leaf node, cannot accept children
+      return null;
+    }
+  }
+
   // Check for circular dependency (can't move a parent into its own child)
   if (newParentId && isDescendant(parsedData, newParentId, nodeId)) {
     return null;

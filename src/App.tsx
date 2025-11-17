@@ -170,6 +170,11 @@ function App() {
       if (newParentId && !expandedNodes.has(newParentId)) {
         setExpandedNodes(prev => new Set(prev).add(newParentId));
       }
+      // Highlight the moved node to show its new location
+      const movedNode = updated.nodes.get(nodeId);
+      if (movedNode) {
+        setSelectedNode(movedNode);
+      }
     } else {
       alert('Cannot move node: This would create a circular dependency or invalid hierarchy.');
     }
