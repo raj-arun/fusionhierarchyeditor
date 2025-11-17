@@ -32,6 +32,7 @@ function App() {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [hiddenColumns, setHiddenColumns] = useState<string[]>([]);
+  const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({});
 
   const handleDataLoaded = useCallback((data: ParsedData) => {
     setParsedData(data);
@@ -260,6 +261,20 @@ function App() {
     }
   }, [parsedData, expandedNodes]);
 
+  const handleColumnVisibilityChange = useCallback((hiddenColumnsList: string[]) => {
+    if (!parsedData) return;
+
+    // Update hidden columns list
+    setHiddenColumns(hiddenColumnsList);
+
+    // Update column visibility state
+    const visibilityState: Record<string, boolean> = {};
+    parsedData.columns.forEach(col => {
+      visibilityState[col] = !hiddenColumnsList.includes(col);
+    });
+    setColumnVisibility(visibilityState);
+  }, [parsedData]);
+
   const visibleNodes = useMemo(() => {
     if (!parsedData) return [];
     return getVisibleNodes(parsedData.roots, expandedNodes);
@@ -438,7 +453,8 @@ function App() {
                       onMoveUp={handleMoveNodeUp}
                       onMoveDown={handleMoveNodeDown}
                       parsedData={parsedData}
-                      onColumnVisibilityChange={setHiddenColumns}
+                      onColumnVisibilityChange={handleColumnVisibilityChange}
+                      initialColumnVisibility={columnVisibility}
                     />
                   ) : (
                     <PropertiesGrid

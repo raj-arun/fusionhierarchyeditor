@@ -26,6 +26,7 @@ interface HierarchyGridProps {
   onMoveDown?: (nodeId: string) => void;
   parsedData?: ParsedData;
   onColumnVisibilityChange?: (hiddenColumns: string[]) => void;
+  initialColumnVisibility?: VisibilityState;
 }
 
 export function HierarchyGrid({
@@ -38,14 +39,20 @@ export function HierarchyGrid({
   onMoveDown,
   parsedData,
   onColumnVisibilityChange,
+  initialColumnVisibility = {},
 }: HierarchyGridProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(initialColumnVisibility);
   const [showColumnMenu, setShowColumnMenu] = useState(false);
   const [showSearchReplace, setShowSearchReplace] = useState(false);
   const columnMenuRef = useRef<HTMLDivElement>(null);
+
+  // Sync column visibility when initial visibility changes
+  useEffect(() => {
+    setColumnVisibility(initialColumnVisibility);
+  }, [initialColumnVisibility]);
 
   // Close column menu when clicking outside
   useEffect(() => {
