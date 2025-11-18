@@ -171,3 +171,84 @@ ipcMain.handle('db:search', async (event, { propertyName, searchValue }) => {
     return { success: false, error: error.message };
   }
 });
+
+// Views IPC Handlers
+ipcMain.handle('views:init', async (event, columns) => {
+  try {
+    hierarchyDB.initializeDefaultView(columns);
+    return { success: true };
+  } catch (error) {
+    console.error('Views init error:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('views:getAll', async () => {
+  try {
+    const views = hierarchyDB.getAllViews();
+    return { success: true, views };
+  } catch (error) {
+    console.error('Views getAll error:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('views:create', async (event, viewData) => {
+  try {
+    const view = hierarchyDB.createView(viewData);
+    return { success: true, view };
+  } catch (error) {
+    console.error('Views create error:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('views:update', async (event, { viewId, updates }) => {
+  try {
+    const result = hierarchyDB.updateView(viewId, updates);
+    return { success: result };
+  } catch (error) {
+    console.error('Views update error:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('views:delete', async (event, viewId) => {
+  try {
+    const result = hierarchyDB.deleteView(viewId);
+    return { success: result };
+  } catch (error) {
+    console.error('Views delete error:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('views:getActive', async () => {
+  try {
+    const viewId = hierarchyDB.getActiveViewId();
+    return { success: true, viewId };
+  } catch (error) {
+    console.error('Views getActive error:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('views:setActive', async (event, viewId) => {
+  try {
+    hierarchyDB.setActiveViewId(viewId);
+    return { success: true };
+  } catch (error) {
+    console.error('Views setActive error:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('views:get', async (event, viewId) => {
+  try {
+    const view = hierarchyDB.getView(viewId);
+    return { success: true, view };
+  } catch (error) {
+    console.error('Views get error:', error);
+    return { success: false, error: error.message };
+  }
+});

@@ -20,4 +20,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     search: (propertyName, searchValue) =>
       ipcRenderer.invoke('db:search', { propertyName, searchValue }),
   },
+
+  // Views operations
+  views: {
+    init: (columns) => ipcRenderer.invoke('views:init', columns),
+    getAll: () => ipcRenderer.invoke('views:getAll'),
+    create: (viewData) => ipcRenderer.invoke('views:create', viewData),
+    update: (viewId, updates) => ipcRenderer.invoke('views:update', { viewId, updates }),
+    delete: (viewId) => ipcRenderer.invoke('views:delete', viewId),
+    getActive: () => ipcRenderer.invoke('views:getActive'),
+    setActive: (viewId) => ipcRenderer.invoke('views:setActive', viewId),
+    get: (viewId) => ipcRenderer.invoke('views:get', viewId),
+  },
 });

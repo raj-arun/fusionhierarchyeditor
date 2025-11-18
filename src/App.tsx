@@ -51,7 +51,7 @@ function App() {
     return views.find(v => v.isDefault) || createDefaultView([]);
   }, [views, currentViewId]);
 
-  const handleDataLoaded = useCallback((data: ParsedData) => {
+  const handleDataLoaded = useCallback(async (data: ParsedData) => {
     setParsedData(data);
     setSelectedNode(null);
     setShowUpload(false);
@@ -59,11 +59,11 @@ function App() {
     setExpandedNodes(new Set());
 
     // Initialize views with default view
-    const initializedViews = initializeViews(data.columns);
+    const initializedViews = await initializeViews(data.columns);
     setViews(initializedViews);
 
     // Load and set active view
-    const activeViewId = getActiveViewId();
+    const activeViewId = await getActiveViewId();
     setCurrentViewId(activeViewId);
   }, []);
 
@@ -287,12 +287,12 @@ function App() {
   }, [parsedData, expandedNodes]);
 
   // View management handlers
-  const handleSelectView = useCallback((viewId: string) => {
+  const handleSelectView = useCallback(async (viewId: string) => {
     setCurrentViewId(viewId);
-    setActiveViewId(viewId);
+    await setActiveViewId(viewId);
   }, []);
 
-  const handleSaveNewView = useCallback((application: string, instance: string, dimension: string, name: string) => {
+  const handleSaveNewView = useCallback(async (application: string, instance: string, dimension: string, name: string) => {
     if (!parsedData) return;
 
     // Get current column visibility from hiddenColumns
@@ -301,18 +301,18 @@ function App() {
       columnVisibility[col] = !hiddenColumns.includes(col);
     });
 
-    const result = createView(application, instance, dimension, name, columnVisibility);
+    const result = await createView(application, instance, dimension, name, columnVisibility);
     if ('error' in result) {
       alert(result.error);
     } else {
       // Reload views and switch to the new view
-      const updatedViews = loadViews();
+      const updatedViews = await loadViews();
       setViews(updatedViews);
-      handleSelectView(result.id);
+      await handleSelectView(result.id);
     }
   }, [parsedData, hiddenColumns, handleSelectView]);
 
-  const handleUpdateCurrentView = useCallback(() => {
+  const handleUpdateCurrentView = useCallback(async () => {
     if (!parsedData || currentView.isDefault) return;
 
     // Get current column visibility from hiddenColumns
@@ -321,31 +321,31 @@ function App() {
       columnVisibility[col] = !hiddenColumns.includes(col);
     });
 
-    const success = updateView(currentView.id, { columnVisibility });
+    const success = await updateView(currentView.id, { columnVisibility });
     if (success) {
       // Reload views
-      const updatedViews = loadViews();
+      const updatedViews = await loadViews();
       setViews(updatedViews);
     }
   }, [parsedData, currentView, hiddenColumns]);
 
-  const handleRenameView = useCallback((application: string, instance: string, dimension: string, name: string) => {
+  const handleRenameView = useCallback(async (application: string, instance: string, dimension: string, name: string) => {
     if (!viewToRename) return;
 
-    const success = updateView(viewToRename.id, { application, instance, dimension, name });
+    const success = await updateView(viewToRename.id, { application, instance, dimension, name });
     if (success) {
       // Reload views
-      const updatedViews = loadViews();
+      const updatedViews = await loadViews();
       setViews(updatedViews);
       setViewToRename(null);
     }
   }, [viewToRename]);
 
-  const handleDeleteView = useCallback((viewId: string) => {
-    const success = deleteView(viewId);
+  const handleDeleteView = useCallback(async (viewId: string) => {
+    const success = await deleteView(viewId);
     if (success) {
       // Reload views
-      const updatedViews = loadViews();
+      const updatedViews = await loadViews();
       setViews(updatedViews);
     }
   }, []);
