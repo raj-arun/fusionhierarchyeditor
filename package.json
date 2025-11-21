@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@tanstack/react-table": "^8.21.3",
+    "@tanstack/react-virtual": "^3.13.12",
     "better-sqlite3": "^12.4.1",
     "clsx": "^2.1.1",
     "exceljs": "^4.4.0",

@@ -491,7 +491,7 @@ function App() {
                 </div>
                 <div className="flex-1 overflow-hidden">
                   <TreeView
-                    nodes={parsedData.roots}
+                    nodes={visibleNodes}
                     selectedNode={selectedNode}
                     onNodeSelect={setSelectedNode}
                     expandedNodes={expandedNodes}

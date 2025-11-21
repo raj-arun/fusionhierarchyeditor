@@ -1,4 +1,5 @@
-import { useCallback, useState, memo } from 'react';
+import { useCallback, useState, memo, useRef } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import {
   ChevronRight,
   ChevronDown,
@@ -216,16 +217,27 @@ export function TreeView({
 }: TreeViewProps) {
   const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
   const [dragOverNodeId, setDragOverNodeId] = useState<string | null>(null);
+  const parentRef = useRef<HTMLDivElement>(null);
 
-  // Helper to find node by ID in the tree
-  const findNode = useCallback((nodeId: string, nodes: HierarchyNode[]): HierarchyNode | null => {
-    for (const node of nodes) {
-      if (node.id === nodeId) return node;
-      const found = findNode(nodeId, node.children);
-      if (found) return found;
+  // Setup virtual scrolling
+  const virtualizer = useVirtualizer({
+    count: nodes.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 36, // Approximate height of each row in pixels
+    overscan: 10, // Render 10 extra items above and below viewport
+  });
+
+  // Helper to find siblings for move operations
+  const getSiblings = useCallback((node: HierarchyNode): HierarchyNode[] => {
+    // If the node has no parent, return all root nodes
+    if (!node.parent) {
+      return nodes.filter(n => !n.parent);
     }
-    return null;
-  }, []);
+
+    // Find the parent node and return its children
+    const parentNode = nodes.find(n => n.id === node.parent);
+    return parentNode?.children || [];
+  }, [nodes]);
 
   const handleDragStart = useCallback((nodeId: string) => {
     setDraggedNodeId(nodeId);
@@ -233,7 +245,6 @@ export function TreeView({
 
   const handleDragOver = useCallback((nodeId: string, node: HierarchyNode) => {
     // Only allow drag over if target is not a leaf node (has children or can have children)
-    // Allow root drops (when parent nodes are expanded)
     if (node.children.length > 0) {
       setDragOverNodeId(nodeId);
     } else {
@@ -257,55 +268,73 @@ export function TreeView({
     setDragOverNodeId(null);
   }, []);
 
-  const renderNode = (node: HierarchyNode, siblings: HierarchyNode[], index: number) => {
-    const isExpanded = expandedNodes.has(node.id);
-    const hasChildren = node.children.length > 0;
-    const isDragOver = dragOverNodeId === node.id;
-    const isLeaf = !hasChildren;
-
-    // Determine if node can move up/down within siblings
-    // Disable if only one child in the parent
-    const canMoveUp = isLeaf && siblings.length > 1 && index > 0;
-    const canMoveDown = isLeaf && siblings.length > 1 && index < siblings.length - 1;
-
+  if (nodes.length === 0) {
     return (
-      <div key={node.id} onDragEnd={handleDragEnd}>
-        <TreeNode
-          node={node}
-          isSelected={selectedNode?.id === node.id}
-          onSelect={onNodeSelect}
-          isExpanded={isExpanded}
-          onToggle={() => onToggleExpand(node.id)}
-          onContextMenu={onContextMenu}
-          onDragStart={handleDragStart}
-          onDragOver={handleDragOver}
-          onDrop={handleDrop}
-          isDragOver={isDragOver}
-          onMoveUp={onMoveUp}
-          onMoveDown={onMoveDown}
-          canMoveUp={canMoveUp}
-          canMoveDown={canMoveDown}
-        />
-        {hasChildren && isExpanded && (
-          <div>
-            {node.children.map((child, idx) => renderNode(child, node.children, idx))}
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  return (
-    <div className="w-full h-full overflow-auto p-2">
-      {nodes.length === 0 ? (
+      <div className="w-full h-full overflow-auto p-2">
         <div className="flex items-center justify-center h-full text-muted-foreground">
           <p className="text-sm">No data loaded</p>
         </div>
-      ) : (
-        <div className="space-y-0.5">
-          {nodes.map((node, idx) => renderNode(node, nodes, idx))}
-        </div>
-      )}
+      </div>
+    );
+  }
+
+  const virtualItems = virtualizer.getVirtualItems();
+
+  return (
+    <div ref={parentRef} className="w-full h-full overflow-auto p-2">
+      <div
+        style={{
+          height: `${virtualizer.getTotalSize()}px`,
+          width: '100%',
+          position: 'relative',
+        }}
+      >
+        {virtualItems.map((virtualItem) => {
+          const node = nodes[virtualItem.index];
+          const siblings = getSiblings(node);
+          const indexInSiblings = siblings.findIndex(s => s.id === node.id);
+
+          const isExpanded = expandedNodes.has(node.id);
+          const hasChildren = node.children.length > 0;
+          const isDragOver = dragOverNodeId === node.id;
+          const isLeaf = !hasChildren;
+
+          // Determine if node can move up/down within siblings
+          const canMoveUp = isLeaf && siblings.length > 1 && indexInSiblings > 0;
+          const canMoveDown = isLeaf && siblings.length > 1 && indexInSiblings < siblings.length - 1;
+
+          return (
+            <div
+              key={virtualItem.key}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                transform: `translateY(${virtualItem.start}px)`,
+              }}
+              onDragEnd={handleDragEnd}
+            >
+              <TreeNode
+                node={node}
+                isSelected={selectedNode?.id === node.id}
+                onSelect={onNodeSelect}
+                isExpanded={isExpanded}
+                onToggle={() => onToggleExpand(node.id)}
+                onContextMenu={onContextMenu}
+                onDragStart={handleDragStart}
+                onDragOver={handleDragOver}
+                onDrop={handleDrop}
+                isDragOver={isDragOver}
+                onMoveUp={onMoveUp}
+                onMoveDown={onMoveDown}
+                canMoveUp={canMoveUp}
+                canMoveDown={canMoveDown}
+              />
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
