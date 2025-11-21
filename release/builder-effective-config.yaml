@@ -1,0 +1,28 @@
+directories:
+  output: release
+  buildResources: public
+appId: com.fusion.hierarchyeditor
+productName: Fusion Hierarchy Editor
+files:
+  - filter:
+      - dist/**/*
+      - electron/**/*
+      - package.json
+win:
+  target:
+    - nsis
+    - portable
+  icon: public/vite.svg
+mac:
+  target:
+    - dmg
+    - zip
+  icon: public/vite.svg
+  category: public.app-category.productivity
+linux:
+  target:
+    - AppImage
+    - deb
+  icon: public/vite.svg
+  category: Utility
+electronVersion: 39.2.1
